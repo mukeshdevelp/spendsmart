@@ -1,17 +1,13 @@
-# OP - remote bucket state name
-output "state_bucket_name" {
-  description = "S3 bucket that stores Terraform state."
-
-  value = aws_s3_bucket.remote_backend.id
+output "bucket_name" {
+  description = "Shared S3 bucket name."
+  value       = module.bootstrap.bucket_name
 }
 
-# OP - dynamo table name
 output "dynamodb_table_name" {
   description = "DynamoDB table used for Terraform state locking."
-  value       = aws_dynamodb_table.state_lock.name
+  value       = module.bootstrap.dynamodb_table_name
 }
 
-# OP - backend region for bucket
 output "backend_region" {
   description = "Region of the state backend."
   value       = var.aws_region

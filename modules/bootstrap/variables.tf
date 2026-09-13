@@ -1,13 +1,6 @@
-variable "aws_region" {
-  description = "AWS region for the Terraform state backend."
-  type        = string
-  default     = "us-east-1"
-}
-
 variable "project_name" {
   description = "Name prefix for backend resources."
   type        = string
-  default     = "spendsmart"
 }
 
 variable "environment" {
@@ -23,17 +16,7 @@ variable "bucket_name" {
 }
 
 variable "dynamodb_table_name" {
-  description = "DynamoDB table name for Terraform state locking."
+  description = "DynamoDB table name for Terraform state locking. Leave empty to use project_name-tfstate-locks."
   type        = string
   default     = ""
-}
-
-variable "tags" {
-  description = "Tags applied to backend resources."
-  type        = map(string)
-  default = {
-    Project   = "spendsmart"
-    ManagedBy = "terraform"
-    Component = "storage-backend"
-  }
 }

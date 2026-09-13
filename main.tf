@@ -1,13 +1,15 @@
 locals {
   name_prefix = "${var.project_name}-${var.environment}"
 
-  data_bucket_name = var.data_bucket_name != "" ? var.data_bucket_name : "${var.project_name}-${var.environment}-data"
+  bucket_name           = var.bucket_name != "" ? var.bucket_name : "${var.project_name}-${var.environment}"
+  data_prefix           = "data"
+  athena_results_prefix = "athena-results"
 
-  athena_results_bucket_name = var.athena_results_bucket_name != "" ? var.athena_results_bucket_name : "${var.project_name}-${var.environment}-athena"
+  ssh_private_key_secret_name = var.ssh_private_key_secret_name != "" ? var.ssh_private_key_secret_name : "${local.name_prefix}-ssh-private-key"
 }
 
-module "networking" {
-  source = "./networking"
+module "network_skeleton" {
+  source = "./modules/network-skeleton"
 
   name_prefix                              = local.name_prefix
   vpc_cidr                                 = var.vpc_cidr
@@ -30,83 +32,46 @@ module "networking" {
   nodes_nacl_egress_allow_vpc              = var.nodes_nacl_egress_allow_vpc
 }
 
-module "security" {
-  source = "./security"
+module "bastion" {
+  source = "./modules/bastion"
 
-  vpc_id                              = module.networking.vpc_id
-  vpc_cidr                            = module.networking.vpc_cidr
-  public_subnet_cidrs                 = var.public_subnet_cidrs
   name_prefix                         = local.name_prefix
+  vpc_id                              = module.network_skeleton.vpc_id
   aws_region                          = var.aws_region
+  public_subnet_id                    = module.network_skeleton.first_public_subnet_id
+  private_subnet_id                   = module.network_skeleton.first_private_subnet_id
   bastion_enabled                     = var.bastion_enabled
+  bastion_instance_type               = var.bastion_instance_type
+  bastion_associate_eip               = var.bastion_associate_eip
   bastion_allowed_ssh_cidrs           = var.bastion_allowed_ssh_cidrs
-  alb_enabled                         = var.alb_enabled
-  alb_target_port                     = var.alb_target_port
-  clickhouse_enabled                  = var.clickhouse_enabled
-  clickhouse_http_port                = var.clickhouse_http_port
-  clickhouse_native_port              = var.clickhouse_native_port
-  eks_cluster_name                    = var.eks_cluster_name
   create_ssh_key                      = var.create_ssh_key
   ssh_key_name                        = var.ssh_key_name
   ssh_private_key_secret_name         = var.ssh_private_key_secret_name
   ssh_key_secret_recovery_window_days = var.ssh_key_secret_recovery_window_days
   bastion_key_name                    = var.bastion_key_name
+  clickhouse_enabled                  = var.clickhouse_enabled
+  clickhouse_instance_type            = var.clickhouse_instance_type
+  clickhouse_root_volume_size         = var.clickhouse_root_volume_size
+  clickhouse_data_volume_size         = var.clickhouse_data_volume_size
+  clickhouse_http_port                = var.clickhouse_http_port
+  clickhouse_native_port              = var.clickhouse_native_port
 
-  depends_on = [module.networking]
-}
-
-module "ec2" {
-  source = "./ec2"
-
-  name_prefix                   = local.name_prefix
-  bastion_enabled               = var.bastion_enabled
-  bastion_instance_type         = var.bastion_instance_type
-  bastion_associate_eip         = var.bastion_associate_eip
-  public_subnet_id              = module.networking.first_public_subnet_id
-  bastion_security_group_id     = module.security.bastion_security_group_id
-  ec2_ssm_instance_profile_name = module.security.ec2_ssm_instance_profile_name
-  ec2_key_name                  = module.security.ec2_key_name
-
-  depends_on = [module.networking, module.security]
-}
-
-module "db" {
-  source = "./db"
-
-  name_prefix                   = local.name_prefix
-  clickhouse_enabled            = var.clickhouse_enabled
-  clickhouse_instance_type      = var.clickhouse_instance_type
-  clickhouse_root_volume_size   = var.clickhouse_root_volume_size
-  clickhouse_data_volume_size   = var.clickhouse_data_volume_size
-  private_subnet_id             = module.networking.first_private_subnet_id
-  clickhouse_security_group_id  = module.security.clickhouse_security_group_id
-  ec2_ssm_instance_profile_name = module.security.ec2_ssm_instance_profile_name
-  ec2_key_name                  = module.security.ec2_key_name
-
-  depends_on = [module.networking, module.security]
-}
-
-module "monitoring" {
-  source = "./monitoring"
-
-  eks_cluster_name = var.eks_cluster_name
+  depends_on = [module.network_skeleton]
 }
 
 module "eks" {
-  source = "./eks"
+  source = "./modules/eks"
 
   name_prefix                   = local.name_prefix
-  vpc_id                        = module.networking.vpc_id
-  private_subnet_ids            = values(module.networking.private_subnet_ids)
-  private_subnet_map            = module.networking.private_subnet_map
-  public_subnet_ids             = values(module.networking.public_subnet_ids)
+  vpc_id                        = module.network_skeleton.vpc_id
+  private_subnet_ids            = values(module.network_skeleton.private_subnet_ids)
+  private_subnet_map            = module.network_skeleton.private_subnet_map
+  public_subnet_ids             = values(module.network_skeleton.public_subnet_ids)
   eks_cluster_name              = var.eks_cluster_name
   eks_cluster_version           = var.eks_cluster_version
   eks_endpoint_private_access   = var.eks_endpoint_private_access
   eks_endpoint_public_access    = var.eks_endpoint_public_access
   eks_public_access_cidrs       = var.eks_public_access_cidrs
-  eks_enabled_cluster_log_types = var.eks_enabled_cluster_log_types
-  log_group_name                = module.monitoring.eks_log_group_name
   eks_node_instance_types       = var.eks_node_instance_types
   eks_node_desired_size         = var.eks_node_desired_size
   eks_node_min_size             = var.eks_node_min_size
@@ -114,11 +79,15 @@ module "eks" {
   eks_node_disk_size            = var.eks_node_disk_size
   eks_node_capacity_type        = var.eks_node_capacity_type
   eks_node_ami_type             = var.eks_node_ami_type
-  ec2_key_name                  = module.security.ec2_key_name
-  eks_nodes_security_group_id   = module.security.eks_nodes_security_group_id
+  ec2_key_name                  = module.bastion.ec2_key_name
+  bastion_enabled               = var.bastion_enabled
+  bastion_security_group_id     = module.bastion.bastion_security_group_id
+  clickhouse_enabled            = var.clickhouse_enabled
+  clickhouse_security_group_id  = module.bastion.clickhouse_security_group_id
+  clickhouse_http_port          = var.clickhouse_http_port
+  clickhouse_native_port        = var.clickhouse_native_port
   alb_enabled                   = var.alb_enabled
   alb_internal                  = var.alb_internal
-  alb_security_group_id         = module.security.alb_security_group_id
   alb_listener_port             = var.alb_listener_port
   alb_listener_protocol         = var.alb_listener_protocol
   alb_certificate_arn           = var.alb_certificate_arn
@@ -130,21 +99,34 @@ module "eks" {
   domain_name                   = var.domain_name
   app_hostname                  = var.app_hostname
 
-  depends_on = [module.networking, module.security, module.monitoring]
+  depends_on = [module.network_skeleton, module.bastion]
+}
+
+module "s3" {
+  source = "./modules/s3"
+
+  bucket_name           = local.bucket_name
+  data_prefix           = local.data_prefix
+  athena_results_prefix = local.athena_results_prefix
 }
 
 module "glue" {
-  source = "./glue"
+  source = "./modules/glue"
 
   name_prefix        = local.name_prefix
-  data_bucket_name   = local.data_bucket_name
+  bucket_arn         = module.s3.bucket_arn
+  data_prefix        = module.s3.data_prefix
   glue_database_name = var.glue_database_name
+
+  depends_on = [module.s3]
 }
 
 module "athena" {
-  source = "./athena"
+  source = "./modules/athena"
 
-  athena_results_bucket_name  = local.athena_results_bucket_name
+  athena_output_location      = module.s3.athena_output_location
   athena_workgroup_name       = var.athena_workgroup_name
   athena_bytes_scanned_cutoff = var.athena_bytes_scanned_cutoff
+
+  depends_on = [module.s3]
 }

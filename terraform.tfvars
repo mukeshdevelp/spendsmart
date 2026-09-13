@@ -59,7 +59,6 @@ eks_cluster_version           = "1.31"
 eks_endpoint_private_access   = true
 eks_endpoint_public_access    = true
 eks_public_access_cidrs       = ["0.0.0.0/0"]
-eks_enabled_cluster_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
 eks_node_instance_types       = ["c6i.xlarge"]
 eks_node_desired_size         = 1
 eks_node_min_size             = 1
@@ -84,9 +83,8 @@ route53_zone_id     = ""
 domain_name         = "spendsmart.example.com"
 app_hostname        = "app.spendsmart.example.com"
 
-# Athena and Glue related configs
-data_bucket_name            = ""
-athena_results_bucket_name  = ""
+# Shared S3 bucket (created by bootstrap; must match backend.tf and bootstrap/terraform.tfvars)
+bucket_name = ""
 glue_database_name          = "spendsmart_analytics"
 athena_workgroup_name       = "spendsmart"
 athena_bytes_scanned_cutoff = 10737418240

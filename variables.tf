@@ -6,6 +6,7 @@ variable "aws_region" {
 variable "project_name" {
   description = "Name prefix used on resources."
   type        = string
+  
 }
 
 variable "environment" {
@@ -209,11 +210,6 @@ variable "eks_public_access_cidrs" {
   type        = list(string)
 }
 
-variable "eks_enabled_cluster_log_types" {
-  description = "EKS control-plane log types to send to CloudWatch."
-  type        = list(string)
-}
-
 variable "eks_node_instance_types" {
   description = "Instance types for both EKS managed node groups."
   type        = list(string)
@@ -311,14 +307,8 @@ variable "app_hostname" {
   type        = string
 }
 
-variable "data_bucket_name" {
-  description = "Optional explicit S3 data-lake bucket name. Leave empty to derive from project and environment."
-  type        = string
-  default     = ""
-}
-
-variable "athena_results_bucket_name" {
-  description = "Optional explicit Athena results bucket name. Leave empty to derive from project and environment."
+variable "bucket_name" {
+  description = "Shared S3 bucket name (created by bootstrap). Leave empty to derive from project and environment."
   type        = string
   default     = ""
 }
