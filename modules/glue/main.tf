@@ -4,7 +4,7 @@ resource "aws_glue_catalog_database" "this" {
   description = "SpendSmart analytics catalog"
 }
 
-# iam policy document
+# iam policy document for glue
 data "aws_iam_policy_document" "glue_assume" {
   statement {
     actions = ["sts:AssumeRole"]
@@ -16,7 +16,7 @@ data "aws_iam_policy_document" "glue_assume" {
   }
 }
 
-# glue creation
+# glue iam role creation
 resource "aws_iam_role" "glue" {
   name               = "${var.name_prefix}-glue"
   assume_role_policy = data.aws_iam_policy_document.glue_assume.json
@@ -45,7 +45,7 @@ data "aws_iam_policy_document" "glue_s3" {
   }
 }
 
-# aws iam role for glue
+# aws iam policy for glue
 resource "aws_iam_role_policy" "glue_s3" {
   name   = "${var.name_prefix}-glue-s3"
   role   = aws_iam_role.glue.id

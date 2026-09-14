@@ -1,3 +1,4 @@
+# athena workgroup creation
 resource "aws_athena_workgroup" "this" {
   name = var.athena_workgroup_name
 

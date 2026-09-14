@@ -6,7 +6,7 @@ variable "aws_region" {
 variable "project_name" {
   description = "Name prefix used on resources."
   type        = string
-  
+
 }
 
 variable "environment" {
@@ -41,51 +41,6 @@ variable "private_subnet_cidrs" {
   type        = list(string)
 }
 
-variable "enable_nodes_nacl" {
-  description = "Create a custom Network ACL and associate it with the private/node subnets."
-  type        = bool
-}
-
-variable "nodes_nacl_ingress_from_public_tcp_ports" {
-  description = "TCP ports allowed inbound to node subnets from each public subnet CIDR."
-  type        = list(number)
-}
-
-variable "nodes_nacl_ingress_allow_vpc" {
-  description = "Allow all inbound traffic from the VPC CIDR into node subnets."
-  type        = bool
-}
-
-variable "nodes_nacl_ephemeral_from_port" {
-  description = "First port in the ephemeral range allowed as return traffic."
-  type        = number
-}
-
-variable "nodes_nacl_ephemeral_to_port" {
-  description = "Last port in the ephemeral range allowed as return traffic."
-  type        = number
-}
-
-variable "nodes_nacl_ephemeral_protocols" {
-  description = "Protocols for ephemeral NACL rules, for example tcp and udp."
-  type        = list(string)
-}
-
-variable "nodes_nacl_egress_internet_tcp_ports" {
-  description = "TCP ports allowed outbound from node subnets to 0.0.0.0/0."
-  type        = list(number)
-}
-
-variable "nodes_nacl_egress_internet_udp_ports" {
-  description = "UDP ports allowed outbound from node subnets to 0.0.0.0/0."
-  type        = list(number)
-}
-
-variable "nodes_nacl_egress_allow_vpc" {
-  description = "Allow all outbound traffic from node subnets to the VPC CIDR."
-  type        = bool
-}
-
 variable "enable_nat_gateway" {
   description = "Create NAT gateway(s) so private subnets can reach the internet."
   type        = bool
@@ -116,33 +71,21 @@ variable "bastion_instance_type" {
   type        = string
 }
 
-variable "create_ssh_key" {
-  description = "Create an EC2 key pair in AWS (CreateKeyPair API) and store the private key PEM in Secrets Manager."
-  type        = bool
-}
-
-variable "ssh_key_name" {
-  description = "EC2 key pair name. Leave empty to use project-environment-ssh-key."
+variable "ec2_key_name" {
+  description = "Name of an existing EC2 key pair in this AWS account and region. It is validated and attached to the bastion and EKS worker nodes."
   type        = string
-  default     = ""
 }
 
-variable "ssh_private_key_secret_name" {
-  description = "Secrets Manager secret name for the SSH private key PEM. Leave empty to use project-environment-ssh-private-key."
+variable "internet_route_cidr" {
+  description = "Destination CIDR for default VPC routes to the internet (IGW and NAT)."
   type        = string
-  default     = ""
+  default     = "0.0.0.0/0"
 }
 
-variable "ssh_key_secret_recovery_window_days" {
-  description = "Days to retain the secret after delete (0 = immediate delete, 7-30 typical for production)."
+variable "bastion_ssh_port" {
+  description = "TCP port for SSH ingress to the bastion security group."
   type        = number
-  default     = 7
-}
-
-variable "bastion_key_name" {
-  description = "Existing EC2 key pair when create_ssh_key is false. Leave empty for no SSH key on instances."
-  type        = string
-  default     = ""
+  default     = 22
 }
 
 variable "bastion_allowed_ssh_cidrs" {
@@ -155,34 +98,51 @@ variable "bastion_associate_eip" {
   type        = bool
 }
 
-variable "clickhouse_enabled" {
-  description = "Create a self-managed ClickHouse EC2 instance in a private subnet."
-  type        = bool
+variable "bastion_egress_cidrs" {
+  description = "CIDR blocks allowed for bastion egress."
+  type        = list(string)
 }
 
-variable "clickhouse_instance_type" {
-  description = "EC2 instance type for ClickHouse."
+variable "bastion_root_volume_size" {
+  description = "Root EBS volume size in GiB for the bastion."
+  type        = number
+}
+
+variable "bastion_root_volume_type" {
+  description = "Root EBS volume type for the bastion."
   type        = string
 }
 
-variable "clickhouse_root_volume_size" {
-  description = "Root EBS volume size in GiB for ClickHouse."
+variable "bastion_ami_ssm_parameter" {
+  description = "SSM parameter path for the bastion AMI."
+  type        = string
+}
+
+variable "ec2_ssm_policy_arn" {
+  description = "IAM policy ARN for SSM on the bastion."
+  type        = string
+}
+
+variable "nodes_ssh_port" {
+  description = "SSH port on EKS nodes."
   type        = number
 }
 
-variable "clickhouse_data_volume_size" {
-  description = "Additional data EBS volume size in GiB for ClickHouse."
-  type        = number
+variable "nodes_egress_cidrs" {
+  description = "CIDR blocks allowed for EKS node egress."
+  type        = list(string)
 }
 
-variable "clickhouse_http_port" {
-  description = "ClickHouse HTTP port."
-  type        = number
+variable "sg_protocol_tcp" {
+  description = "TCP protocol value for security group rules."
+  type        = string
+  default     = "tcp"
 }
 
-variable "clickhouse_native_port" {
-  description = "ClickHouse native TCP port."
-  type        = number
+variable "sg_protocol_all" {
+  description = "All-traffic protocol value for security group rules."
+  type        = string
+  default     = "-1"
 }
 
 variable "eks_cluster_name" {
@@ -208,6 +168,60 @@ variable "eks_endpoint_public_access" {
 variable "eks_public_access_cidrs" {
   description = "CIDR blocks allowed to reach the public EKS API endpoint."
   type        = list(string)
+}
+
+variable "eks_authentication_mode" {
+  description = "EKS cluster authentication mode."
+  type        = string
+  default     = "API_AND_CONFIG_MAP"
+}
+
+variable "eks_bootstrap_cluster_creator_admin_permissions" {
+  description = "Grant cluster-creator admin permissions on the EKS cluster."
+  type        = bool
+  default     = true
+}
+
+variable "eks_assume_role_action" {
+  description = "STS action for EKS IAM assume-role policies."
+  type        = string
+  default     = "sts:AssumeRole"
+}
+
+variable "eks_cluster_assume_role_principal_type" {
+  description = "Principal type for the EKS cluster IAM role."
+  type        = string
+  default     = "Service"
+}
+
+variable "eks_cluster_assume_role_service" {
+  description = "Service principal for the EKS cluster IAM role."
+  type        = string
+  default     = "eks.amazonaws.com"
+}
+
+variable "eks_node_assume_role_principal_type" {
+  description = "Principal type for the EKS node IAM role."
+  type        = string
+  default     = "Service"
+}
+
+variable "eks_node_assume_role_service" {
+  description = "Service principal for the EKS node IAM role."
+  type        = string
+  default     = "ec2.amazonaws.com"
+}
+
+variable "eks_cluster_role_name_suffix" {
+  description = "Suffix appended to name_prefix for the EKS cluster IAM role."
+  type        = string
+  default     = "-eks-cluster"
+}
+
+variable "eks_nodes_role_name_suffix" {
+  description = "Suffix appended to name_prefix for the EKS node IAM role."
+  type        = string
+  default     = "-eks-nodes"
 }
 
 variable "eks_node_instance_types" {
@@ -245,6 +259,168 @@ variable "eks_node_ami_type" {
   type        = string
 }
 
+variable "eks_node_disk_type" {
+  description = "Node root disk type."
+  type        = string
+}
+
+variable "eks_node_device_name" {
+  description = "Block device name for the node root volume."
+  type        = string
+}
+
+variable "eks_node_volume_encrypted" {
+  description = "Encrypt EKS node root EBS volumes."
+  type        = bool
+  default     = true
+}
+
+variable "eks_node_volume_delete_on_termination" {
+  description = "Delete EKS node root EBS volumes on instance termination."
+  type        = bool
+  default     = true
+}
+
+variable "eks_node_metadata_http_endpoint" {
+  description = "IMDSv2 HTTP endpoint setting for EKS nodes."
+  type        = string
+  default     = "enabled"
+}
+
+variable "eks_node_metadata_http_tokens" {
+  description = "IMDSv2 token requirement for EKS nodes."
+  type        = string
+  default     = "required"
+}
+
+variable "eks_node_metadata_http_put_response_hop_limit" {
+  description = "IMDSv2 hop limit for EKS nodes."
+  type        = number
+  default     = 2
+}
+
+variable "eks_node_instance_tag_resource_type" {
+  description = "Launch template tag specification resource type for EKS nodes."
+  type        = string
+  default     = "instance"
+}
+
+variable "eks_node_launch_template_name_suffix" {
+  description = "Suffix appended to name_prefix for the node launch template name prefix."
+  type        = string
+  default     = "-ng-"
+}
+
+variable "eks_node_instance_name_suffix" {
+  description = "Suffix appended to name_prefix for EKS node instance Name tags."
+  type        = string
+  default     = "-eks-node"
+}
+
+variable "eks_node_group_tag_name_suffix" {
+  description = "Suffix appended to name_prefix for EKS node group Name tags."
+  type        = string
+  default     = "-node-group-"
+}
+
+variable "eks_nodes_security_group_description" {
+  description = "Description for the EKS nodes security group."
+  type        = string
+  default     = "Additional security group for EKS worker nodes"
+}
+
+variable "eks_nodes_security_group_name_suffix" {
+  description = "Suffix appended to name_prefix for the EKS nodes security group."
+  type        = string
+  default     = "-eks-nodes"
+}
+
+variable "eks_nodes_cluster_tag_key_prefix" {
+  description = "Kubernetes cluster ownership tag key prefix for EKS nodes."
+  type        = string
+  default     = "kubernetes.io/cluster/"
+}
+
+variable "eks_nodes_cluster_tag_value" {
+  description = "Kubernetes cluster ownership tag value for EKS nodes."
+  type        = string
+  default     = "owned"
+}
+
+variable "eks_nodes_self_ingress_description" {
+  description = "Description for node-to-node security group ingress."
+  type        = string
+  default     = "Node to node"
+}
+
+variable "eks_nodes_alb_ingress_description" {
+  description = "Description for ALB-to-node security group ingress."
+  type        = string
+  default     = "ALB to node target port"
+}
+
+variable "eks_nodes_ssh_ingress_description" {
+  description = "Description for bastion-to-node SSH security group ingress."
+  type        = string
+  default     = "SSH from bastion"
+}
+
+variable "eks_nodes_egress_description" {
+  description = "Description for EKS node egress security group rules."
+  type        = string
+  default     = "Node egress"
+}
+
+variable "eks_node_group_name_prefix" {
+  description = "Prefix for managed node group names."
+  type        = string
+}
+
+variable "eks_node_az_label_key" {
+  description = "Kubernetes label key used to tag nodes with their AZ."
+  type        = string
+}
+
+variable "eks_node_update_max_unavailable" {
+  description = "Maximum unavailable nodes during a node group update."
+  type        = number
+}
+
+variable "eks_addons" {
+  description = "EKS add-on names to install after node groups are ready."
+  type        = list(string)
+}
+
+variable "eks_cluster_policy_arn" {
+  description = "IAM policy ARN attached to the EKS cluster role."
+  type        = string
+}
+
+variable "eks_vpc_resource_controller_policy_arn" {
+  description = "IAM policy ARN for the EKS VPC resource controller."
+  type        = string
+}
+
+variable "eks_node_worker_policy_arn" {
+  description = "IAM policy ARN for EKS worker nodes."
+  type        = string
+}
+
+variable "eks_node_cni_policy_arn" {
+  description = "IAM policy ARN for the EKS CNI plugin."
+  type        = string
+}
+
+variable "eks_node_ecr_policy_arn" {
+  description = "IAM policy ARN for ECR read access on nodes."
+  type        = string
+}
+
+variable "eks_node_ssm_policy_arn" {
+  description = "IAM policy ARN for SSM on EKS nodes."
+  type        = string
+}
+
 variable "alb_enabled" {
   description = "Create an internet-facing Application Load Balancer in the public subnets."
   type        = bool
@@ -253,6 +429,41 @@ variable "alb_enabled" {
 variable "alb_internal" {
   description = "If true, create an internal ALB instead of an internet-facing ALB."
   type        = bool
+}
+
+variable "alb_allowed_ingress_cidrs" {
+  description = "CIDR blocks allowed to reach the ALB listener."
+  type        = list(string)
+}
+
+variable "alb_security_group_name_suffix" {
+  description = "Suffix appended to name_prefix for the ALB security group and load balancer."
+  type        = string
+  default     = "-alb"
+}
+
+variable "alb_security_group_description" {
+  description = "Description for the ALB security group."
+  type        = string
+  default     = "Application Load Balancer"
+}
+
+variable "alb_ingress_rule_description" {
+  description = "Description for ALB listener ingress security group rules."
+  type        = string
+  default     = "ALB listener"
+}
+
+variable "alb_egress_to_nodes_description" {
+  description = "Description for ALB-to-node egress security group rules."
+  type        = string
+  default     = "ALB to EKS nodes"
+}
+
+variable "alb_load_balancer_type" {
+  description = "Load balancer type for the ALB."
+  type        = string
+  default     = "application"
 }
 
 variable "alb_listener_port" {
@@ -265,15 +476,56 @@ variable "alb_listener_protocol" {
   type        = string
 }
 
+variable "alb_listener_protocol_https" {
+  description = "Protocol value that triggers HTTPS listener settings."
+  type        = string
+  default     = "HTTPS"
+}
+
+variable "alb_listener_action_type" {
+  description = "Default action type for the ALB listener."
+  type        = string
+  default     = "forward"
+}
+
 variable "alb_certificate_arn" {
   description = "ACM certificate ARN required when alb_listener_protocol is HTTPS."
   type        = string
   default     = ""
 }
 
+variable "alb_ssl_policy" {
+  description = "SSL policy for HTTPS listeners."
+  type        = string
+}
+
 variable "alb_target_port" {
   description = "Target group port (typically a NodePort or pod port exposed on EKS nodes)."
   type        = number
+}
+
+variable "alb_target_group_name_suffix" {
+  description = "Suffix appended to name_prefix for the ALB target group."
+  type        = string
+  default     = "-eks"
+}
+
+variable "alb_target_group_tag_name_suffix" {
+  description = "Suffix appended to name_prefix for the ALB target group Name tag."
+  type        = string
+  default     = "-eks-tg"
+}
+
+variable "alb_target_group_protocol" {
+  description = "Target group protocol."
+  type        = string
+  default     = "HTTP"
+}
+
+variable "alb_health_check_enabled" {
+  description = "Enable ALB target group health checks."
+  type        = bool
+  default     = true
 }
 
 variable "alb_health_check_path" {
@@ -286,31 +538,102 @@ variable "alb_health_check_matcher" {
   type        = string
 }
 
-variable "create_route53_zone" {
-  description = "Create a public Route 53 hosted zone for domain_name."
-  type        = bool
+variable "alb_health_check_interval" {
+  description = "Health check interval in seconds."
+  type        = number
 }
 
-variable "route53_zone_id" {
-  description = "Existing Route 53 hosted zone ID. Used when create_route53_zone is false."
-  type        = string
-  default     = ""
+variable "alb_health_check_timeout" {
+  description = "Health check timeout in seconds."
+  type        = number
 }
 
-variable "domain_name" {
-  description = "DNS zone name, for example spendsmart.example.com."
-  type        = string
+variable "alb_health_check_healthy_threshold" {
+  description = "Consecutive successful health checks required."
+  type        = number
 }
 
-variable "app_hostname" {
-  description = "Record name for the ALB alias, for example app.spendsmart.example.com. Use the zone apex by setting this equal to domain_name."
-  type        = string
+variable "alb_health_check_unhealthy_threshold" {
+  description = "Consecutive failed health checks required."
+  type        = number
 }
 
 variable "bucket_name" {
-  description = "Shared S3 bucket name (created by bootstrap). Leave empty to derive from project and environment."
+  description = "Shared S3 bucket name. Leave empty to derive a name from project, environment, and AWS account ID."
   type        = string
   default     = ""
+}
+
+variable "data_prefix" {
+  description = "S3 key prefix for Glue / data-lake objects."
+  type        = string
+  default     = "data"
+}
+
+variable "athena_results_prefix" {
+  description = "S3 key prefix for Athena query results."
+  type        = string
+  default     = "athena-results"
+}
+
+variable "bucket_force_destroy" {
+  description = "Allow Terraform to delete the bucket when empty. Keep false to retain the bucket on destroy."
+  type        = bool
+  default     = false
+}
+
+variable "bucket_versioning_enabled" {
+  description = "Enable versioning on the shared S3 bucket."
+  type        = bool
+  default     = true
+}
+
+variable "bucket_sse_algorithm" {
+  description = "Server-side encryption algorithm for the shared S3 bucket."
+  type        = string
+  default     = "AES256"
+}
+
+variable "bucket_key_enabled" {
+  description = "Enable S3 bucket keys for server-side encryption."
+  type        = bool
+  default     = true
+}
+
+variable "bucket_block_public_acls" {
+  description = "Block public ACLs on the shared S3 bucket."
+  type        = bool
+  default     = true
+}
+
+variable "bucket_block_public_policy" {
+  description = "Block public bucket policies on the shared S3 bucket."
+  type        = bool
+  default     = true
+}
+
+variable "bucket_ignore_public_acls" {
+  description = "Ignore public ACLs on the shared S3 bucket."
+  type        = bool
+  default     = true
+}
+
+variable "bucket_restrict_public_buckets" {
+  description = "Restrict public bucket policies on the shared S3 bucket."
+  type        = bool
+  default     = true
+}
+
+variable "athena_lifecycle_rule_id" {
+  description = "Lifecycle rule ID for Athena result object expiration."
+  type        = string
+  default     = "expire-athena-results"
+}
+
+variable "athena_results_expiration_days" {
+  description = "Days before Athena result objects expire under athena_results_prefix. Set 0 to disable."
+  type        = number
+  default     = 30
 }
 
 variable "glue_database_name" {

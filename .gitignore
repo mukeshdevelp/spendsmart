@@ -12,3 +12,4 @@ override.tf.json
 *.tfplan
 .idea/
 .vscode/
+tfplan-*

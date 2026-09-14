@@ -49,47 +49,8 @@ variable "enable_dns_support" {
   type        = bool
 }
 
-variable "enable_nodes_nacl" {
-  description = "Create a custom Network ACL on private/node subnets."
-  type        = bool
-}
-
-variable "nodes_nacl_ingress_from_public_tcp_ports" {
-  description = "TCP ports allowed inbound to node subnets from each public subnet CIDR."
-  type        = list(number)
-}
-
-variable "nodes_nacl_ingress_allow_vpc" {
-  description = "Allow all inbound traffic from the VPC CIDR into node subnets."
-  type        = bool
-}
-
-variable "nodes_nacl_ephemeral_from_port" {
-  description = "First port in the ephemeral range allowed as return traffic."
-  type        = number
-}
-
-variable "nodes_nacl_ephemeral_to_port" {
-  description = "Last port in the ephemeral range allowed as return traffic."
-  type        = number
-}
-
-variable "nodes_nacl_ephemeral_protocols" {
-  description = "Protocols for ephemeral NACL rules."
-  type        = list(string)
-}
-
-variable "nodes_nacl_egress_internet_tcp_ports" {
-  description = "TCP ports allowed outbound from node subnets to 0.0.0.0/0."
-  type        = list(number)
-}
-
-variable "nodes_nacl_egress_internet_udp_ports" {
-  description = "UDP ports allowed outbound from node subnets to 0.0.0.0/0."
-  type        = list(number)
-}
-
-variable "nodes_nacl_egress_allow_vpc" {
-  description = "Allow all outbound traffic from node subnets to the VPC CIDR."
-  type        = bool
+variable "internet_route_cidr" {
+  description = "Destination CIDR for default routes to the internet (public IGW and private NAT)."
+  type        = string
+  default     = "0.0.0.0/0"
 }

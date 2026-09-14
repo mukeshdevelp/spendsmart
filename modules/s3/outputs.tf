@@ -1,11 +1,11 @@
 output "bucket_name" {
   description = "Shared S3 bucket name."
-  value       = data.aws_s3_bucket.this.id
+  value       = aws_s3_bucket.this.id
 }
 
 output "bucket_arn" {
   description = "Shared S3 bucket ARN."
-  value       = data.aws_s3_bucket.this.arn
+  value       = aws_s3_bucket.this.arn
 }
 
 output "data_prefix" {
@@ -15,7 +15,7 @@ output "data_prefix" {
 
 output "data_location" {
   description = "S3 URI for Glue / data-lake objects."
-  value       = "s3://${data.aws_s3_bucket.this.id}/${var.data_prefix}/"
+  value       = "s3://${aws_s3_bucket.this.id}/${var.data_prefix}/"
 }
 
 output "athena_results_prefix" {
@@ -25,5 +25,5 @@ output "athena_results_prefix" {
 
 output "athena_output_location" {
   description = "S3 URI for Athena query results."
-  value       = "s3://${data.aws_s3_bucket.this.id}/${var.athena_results_prefix}/"
+  value       = "s3://${aws_s3_bucket.this.id}/${var.athena_results_prefix}/"
 }

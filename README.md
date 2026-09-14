@@ -1,89 +1,171 @@
 # SpendSmart AWS Infrastructure (Terraform)
 
-Terraform deployment for the SpendSmart architecture on AWS: two-AZ VPC, bastion, ClickHouse, EKS (EC2 node groups), ALB, Route 53, S3 data lake, Glue, and Athena.
+Terraform for the SpendSmart platform: VPC networking, bastion access, EKS with EC2 node groups, ALB, and analytics (S3, Glue, Athena).
 
-## Directory structure
+## Architecture
+
+```mermaid
+flowchart TB
+  internet([Internet])
+  s3[(S3 bucket: state, data, Athena results)]
+  glue[Glue Data Catalog]
+  athena[Athena workgroup]
+
+  subgraph vpc[VPC — network-skeleton]
+    igw[Internet gateway]
+    subgraph public[Public subnets — two AZs]
+      bastion[Bastion EC2\nbastion security group]
+      alb[Application Load Balancer\nALB security group]
+      nat[NAT gateway(s)]
+    end
+    subgraph private[Private subnets — two AZs]
+      nodes[EKS managed node groups\nnode security group]
+    end
+    control[EKS control plane]
+  end
+
+  internet --> igw
+  igw --> bastion
+  igw --> alb
+  bastion -. SSH : 22 .-> nodes
+  alb --> nodes
+  nodes --> control
+  private --> nat --> igw
+  glue <--> s3
+  athena --> s3
+  athena --> glue
+```
+
+The EKS control plane is AWS-managed. The EKS nodes, bastion, ALB, NAT gateways, and security groups are created in the VPC.
+
+## What each module creates
+
+| Module | Created resources | Called by / key inputs | Outputs consumed by |
+|---|---|---|---|
+| `network-skeleton` | VPC, public/private subnets, internet gateway, NAT gateway(s), NAT Elastic IPs, route tables, routes, and subnet associations | Root `main.tf`; CIDRs, AZs, DNS, NAT settings, cluster name | `bastion`: VPC ID + first public subnet. `eks`: VPC ID + public/private subnet IDs. |
+| `bastion` | Bastion EC2, bastion SG and SSH/egress rules, optional EIP, and SSM IAM role/profile | Root `main.tf`; VPC/subnet from `network-skeleton`, existing EC2 key-pair name, AMI, SSH, and instance settings | `eks`: bastion SG ID + validated EC2 key-pair name. Root outputs: instance ID, public IP, SG ID, and key name. |
+| `eks` | EKS cluster, cluster/node IAM roles and attachments, node SG/rules, launch template, managed node groups, add-ons, and optional ALB, target group, listener, and ALB SG | Root `main.tf`; VPC/subnets from `network-skeleton`, bastion SG/key from `bastion`, EKS and ALB settings | Root outputs: cluster details, node SG, and optional ALB details. |
+| `s3` | Shared S3 bucket, versioning, encryption, public-access block, and Athena-results lifecycle policy | Root `main.tf`; bucket name, prefixes, retention, and protection settings | `glue`: bucket ARN/data prefix. `athena`: results location. |
+| `glue` | Glue catalog database, Glue IAM role, AWS Glue service-policy attachment, and S3 access policy | Root `main.tf`; bucket ARN/data prefix from `s3` and database name | Root outputs: database name and Glue role ARN. |
+| `athena` | Athena workgroup with enforced S3 output location and bytes-scanned limit | Root `main.tf`; results location from `s3` and workgroup settings | Root output: workgroup name. |
+
+Conditional resources are controlled by `bastion_enabled`, `bastion_associate_eip`, `enable_nat_gateway`, `enable_nat_per_az`, and `alb_enabled`.
+
+**Not in Terraform:** ClickHouse (deploy in EKS via Helm/manifests), Route 53 (use external DNS → `alb_dns_name`).
+
+## Repository layout
 
 ```
 .
-├── backend.tf           # Main stack remote state (S3 + DynamoDB) — must exist before root apply
-├── main.tf              # Root wrapper — infra modules only (no bootstrap)
-├── outputs.tf
-├── terraform.tfvars
+├── backend.tf              # Remote state (S3 + native lockfile)
+├── main.tf                 # Module wiring
+├── locals.tf
 ├── variables.tf
+├── terraform.tfvars
+├── outputs.tf
 ├── versions.tf
-├── bootstrap/           # One-time entry point (local state) → calls modules/bootstrap
 └── modules/
-    ├── bootstrap/       # Shared S3 bucket + DynamoDB lock table (reusable module)
-    ├── network-skeleton/
-    ├── bastion/
-    ├── eks/
-    ├── s3/
+    ├── network-skeleton/   # main.tf, locals.tf, variables.tf, outputs.tf
+    ├── bastion/            # main.tf, locals.tf, variables.tf, outputs.tf
+    ├── eks/                # main.tf, variables.tf, outputs.tf
+    ├── s3/                 # Creates shared bucket (survives terraform destroy)
     ├── glue/
     └── athena/
 ```
 
-## Bootstrap vs main stack (run bootstrap once)
+## How modules are called
 
-The **state backend cannot live in the same Terraform apply as the infrastructure** that uses it (chicken-and-egg: the main stack needs the bucket before it can store state there).
+The root module calls every child module in [main.tf](main.tf). A module output passed to another module input creates the dependency relationship.
 
-| Stack | Folder | State | When to run |
-|-------|--------|-------|-------------|
-| Bootstrap | `bootstrap/` | **Local** (`bootstrap/terraform.tfstate`) | **Once** per account/region |
-| Main | repository root | **Remote** S3 (`backend.tf`) | Every deploy |
+```hcl
+module "network_skeleton" { source = "./modules/network-skeleton" }
 
-After bootstrap succeeds, **root `terraform apply` only runs** `network-skeleton`, `bastion`, `eks`, `s3`, `glue`, `athena` — it does **not** recreate the bucket.
+module "bastion" {
+  source           = "./modules/bastion"
+  vpc_id           = module.network_skeleton.vpc_id
+  public_subnet_id = module.network_skeleton.first_public_subnet_id
+}
 
-`modules/bootstrap/` creates **one shared S3 bucket** plus the DynamoDB lock table. The main stack uses folder prefixes inside that bucket:
+module "eks" {
+  source                    = "./modules/eks"
+  vpc_id                    = module.network_skeleton.vpc_id
+  private_subnet_ids        = values(module.network_skeleton.private_subnet_ids)
+  bastion_security_group_id = module.bastion.bastion_security_group_id
+  ec2_key_name              = module.bastion.ec2_key_name
+}
 
-| Prefix | Purpose |
-|--------|---------|
-| `aws/infra/terraform.tfstate` | Terraform remote state (`backend.tf`) |
-| `data/` | Glue / data-lake objects |
-| `athena-results/` | Athena query output |
-
-### First-time setup
-
-```bash
-# 1. Bootstrap — ONCE (creates spendsmart-dev bucket + spendsmart-tfstate-locks table)
-cd bootstrap && terraform init && terraform apply
-
-# 2. Main stack — uses remote backend from backend.tf
-cd .. && terraform init && terraform plan && terraform apply
+module "s3" { source = "./modules/s3" }
+module "glue" {
+  source     = "./modules/glue"
+  bucket_arn = module.s3.bucket_arn
+}
+module "athena" {
+  source                 = "./modules/athena"
+  athena_output_location = module.s3.athena_output_location
+}
 ```
 
-Confirm `backend.tf` and `terraform.tfvars` use the same bucket name as bootstrap (default: `spendsmart-dev`).
+The complete calls provide the configuration values from `terraform.tfvars`. Root `depends_on` declarations additionally enforce the network → bastion → EKS and S3 → Glue/Athena order.
 
-### Later applies
+## S3 bucket and remote state
+
+The `s3` module creates the shared bucket on apply. Glue and Athena use separate prefixes in the same bucket (`data_prefix`, `athena_results_prefix`).
+
+The bucket does not force-delete its contents:
+
+- `bucket_force_destroy = false` — objects are not force-deleted on destroy
+
+With the default setting, `terraform destroy` deletes the bucket only when it is empty. Set `bucket_force_destroy = true` only when you explicitly want Terraform to remove all objects and the bucket.
+
+When `bucket_name` is empty, the default name is `{project_name}-{environment}-{account_id}`, for example `spendsmart-dev-123456789012`. This avoids S3's global bucket-name collisions. [backend.tf.example](backend.tf.example) is the template for enabling remote state after the bucket exists.
+
+### Deploy
 
 ```bash
-# From repository root only — bootstrap is NOT run again
-terraform plan
+terraform init -backend=false
 terraform apply
+
+# Copy the bucket name from `terraform output bucket_name`, then create
+# backend.tf from the template and replace its example bucket value.
+cp backend.tf.example backend.tf
+# Edit backend.tf: replace spendsmart-dev-123456789012 with the output value.
+terraform init -migrate-state
+terraform plan && terraform apply
 ```
 
-Re-running `cd bootstrap && terraform apply` is safe (Terraform updates in place, does not recreate the bucket if it already exists in bootstrap state), but you normally **do not need to** after the first time.
+## Security
 
-## Module wiring (`main.tf`)
+| Rule | Detail |
+|------|--------|
+| Bastion only | Only bastion may use `0.0.0.0/0` (`bastion_allowed_ssh_cidrs`, `bastion_egress_cidrs`) |
+| ALB / EKS API / nodes | Restricted to VPC CIDR or explicit lists in `terraform.tfvars` |
+| No Route 53 | DNS is managed outside this stack |
 
+## Key variables (`terraform.tfvars`)
+
+| Area | Variables |
+|------|-----------|
+| Network | `vpc_cidr`, `public_subnet_cidrs`, `private_subnet_cidrs`, `internet_route_cidr`, `enable_nat_gateway`, `enable_nat_per_az` |
+| Bastion | `ec2_key_name`, `bastion_enabled`, `bastion_ssh_port`, `bastion_allowed_ssh_cidrs`, `bastion_egress_cidrs` |
+| EKS | `eks_cluster_name`, `eks_node_instance_types`, `eks_public_access_cidrs`, `eks_addons` |
+| ALB | `alb_enabled`, `alb_allowed_ingress_cidrs`, `alb_target_port` |
+| Data | `bucket_name`, `data_prefix`, `athena_results_prefix`, `bucket_force_destroy`, `bucket_block_public_acls`, `athena_results_expiration_days`, `glue_database_name`, `athena_workgroup_name` |
+
+## Outputs
+
+```bash
+terraform output eks_configure_kubectl
+terraform output bastion_public_ip
+terraform output alb_dns_name
+terraform output data_location
+terraform output athena_output_location
 ```
-network-skeleton → bastion → eks
-                              ↓
-                    s3 → glue / athena
-```
 
-| Module | Responsibility |
-|--------|----------------|
-| `bootstrap` | Shared S3 bucket + DynamoDB lock table (via `bootstrap/` stack only) |
-| `network-skeleton` | VPC, subnets, IGW, NAT, routes, node NACL |
-| `bastion` | Bastion + ClickHouse EC2, security groups, SSH key, SSM IAM |
-| `eks` | EKS cluster, EC2 node groups, ALB/Route 53 security groups, load balancer, DNS |
-| `s3` | Prefix lifecycle rules on the shared bucket (data + Athena folders) |
-| `glue` | Glue Data Catalog database + IAM role |
-| `athena` | Athena workgroup |
+## Notes
 
-## Important notes
-
-- ClickHouse EC2 only mounts the data volume; ClickHouse software is not installed by Terraform.
-- ALB target group exists but pods/nodes are not auto-registered — attach ASGs or install AWS Load Balancer Controller.
-- The shared S3 bucket name must be globally unique; override `bucket_name` in bootstrap and root `terraform.tfvars` if needed.
+- **ClickHouse** runs in the EKS cluster, not as EC2.
+- **ALB target group** is created but pods are not auto-registered — use AWS Load Balancer Controller or register targets manually.
+- **Existing SSH key** — set `ec2_key_name` in `terraform.tfvars` to an EC2 key pair that already exists in the selected AWS account and region. Terraform validates it with the AWS `aws_key_pair` data source and attaches it to the bastion and all EKS worker nodes. Keep the corresponding private key outside Terraform.
+- **Migration from the former generated-key option** — the prior key pair, Secrets Manager secret, and download policy are removed from Terraform state without deletion, so applying this version does not remove existing key material. Delete those old resources separately only if they are no longer needed.
+- **EKS control plane ("master")** — AWS manages the control-plane instances; they cannot be assigned an EC2 SSH key. Access is through the EKS API, configured by the endpoint and IAM settings.
+- **Nodes** — EC2 managed node groups (not Fargate).

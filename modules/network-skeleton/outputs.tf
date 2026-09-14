@@ -23,21 +23,6 @@ output "first_public_subnet_id" {
   value       = aws_subnet.public_subnets[local.azs[0]].id
 }
 
-output "first_private_subnet_id" {
-  description = "First private subnet ID."
-  value       = aws_subnet.private_subents[local.azs[0]].id
-}
-
-output "first_az" {
-  description = "First availability zone."
-  value       = local.azs[0]
-}
-
-output "azs" {
-  description = "Availability zones in use."
-  value       = local.azs
-}
-
 output "private_subnet_map" {
   description = "Private subnet details keyed by availability zone."
   value = {
@@ -57,9 +42,4 @@ output "internet_gateway_id" {
 output "nat_gateway_ids" {
   description = "NAT gateway IDs keyed by availability zone."
   value       = { for az, nat in aws_nat_gateway.this : az => nat.id }
-}
-
-output "nodes_nacl_id" {
-  description = "Network ACL ID associated with the private/node subnets."
-  value       = var.enable_nodes_nacl ? aws_network_acl.nodes[0].id : null
 }

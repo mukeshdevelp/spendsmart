@@ -47,18 +47,3 @@ output "alb_target_group_arn" {
   description = "ALB target group ARN."
   value       = var.alb_enabled ? aws_lb_target_group.target_group_eks[0].arn : null
 }
-
-output "route53_zone_id" {
-  description = "Route 53 hosted zone ID."
-  value       = local.route53_zone_id != "" ? local.route53_zone_id : null
-}
-
-output "route53_name_servers" {
-  description = "Name servers for a zone created by this module."
-  value       = var.create_route53_zone ? aws_route53_zone.this[0].name_servers : null
-}
-
-output "app_fqdn" {
-  description = "Application DNS name aliased to the ALB."
-  value       = var.alb_enabled && local.route53_zone_id != "" ? aws_route53_record.app[0].fqdn : null
-}
