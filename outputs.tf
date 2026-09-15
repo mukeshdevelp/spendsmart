@@ -127,3 +127,24 @@ output "athena_workgroup_name" {
   description = "Athena workgroup name."
   value       = module.athena.athena_workgroup_name
 }
+
+# outputs for iam role needed for analytics
+output "analytics_iam_role_name" {
+  description = "Analytics IAM role name for spendsmart analytics"
+  value       = module.iam.role_name
+}
+
+output "analytics_iam_role_arn" {
+  description = "Analytics IAM role ARN for spendsmart analytics"
+  value       = module.iam.role_arn
+}
+
+output "analytics_iam_policy_name" {
+  description = "Analytics IAM policy name for spendsmart analytics"
+  value       = module.iam.policy_name
+}
+
+output "analytics_iam_policy_arn" {
+  description = "Analytics IAM policy ARN for spendsmart analytics"
+  value       = module.iam.policy_arn
+}

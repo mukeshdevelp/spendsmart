@@ -9,10 +9,7 @@ data "aws_iam_policy_document" "ec2_assume" {
   }
 }
 
-# The stack previously created a key pair, a Secrets Manager secret, and a
-# download policy. Retain any already-managed copies in AWS while removing
-# them from Terraform state; changing to an existing client key must not
-# delete key material as a side effect of an apply.
+
 removed {
   from = terraform_data.ssh_keypair
 

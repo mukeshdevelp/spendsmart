@@ -3,6 +3,10 @@ variable "aws_region" {
   type        = string
 }
 
+variable "state_file_key" {
+  description = "S3 key for the Terraform state file."
+  type        = string
+}
 variable "project_name" {
   description = "Name prefix used on resources."
   type        = string
@@ -649,4 +653,30 @@ variable "athena_workgroup_name" {
 variable "athena_bytes_scanned_cutoff" {
   description = "Athena per-query bytes-scanned cutoff. Set 0 to disable."
   type        = number
+}
+
+
+# spendsmart required iam policy for analytics, cost
+variable "iam_role_name_suffix" {
+  description = "Suffix for the analytics IAM role"
+  type        = string
+  default     = "-analytics-role"
+}
+
+variable "iam_policy_name_suffix" {
+  description = "Suffix for the analytics IAM policy"
+  type        = string
+  default     = "-analytics-policy"
+}
+
+variable "iam_trusted_principal_type" {
+  description = "Principal type allowed to assume the analytics role"
+  type        = string
+  default     = "AWS"
+}
+
+variable "iam_trusted_principal_identifiers" {
+  description = "Principal ARNs or service principals allowed to assume the role"
+  type        = list(string)
+  default     = []
 }

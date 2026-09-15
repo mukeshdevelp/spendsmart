@@ -1,5 +1,6 @@
 # env related stuff
 aws_region   = "us-east-1"
+state_file_key = "aws/infra/terraform.tfstate"
 project_name = "spendsmart"
 environment  = "dev"
 # Tags configs
@@ -138,3 +139,15 @@ athena_results_expiration_days = 30
 glue_database_name          = "spendsmart_analytics"
 athena_workgroup_name       = "spendsmart"
 athena_bytes_scanned_cutoff = 10737418240
+
+
+# IAM module 
+# IAM
+iam_role_name_suffix   = "-analytics-role"
+iam_policy_name_suffix = "-analytics-policy"
+
+iam_trusted_principal_type = "AWS"
+
+iam_trusted_principal_identifiers = [
+  "arn:aws:iam::123456789012:root"
+]

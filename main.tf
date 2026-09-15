@@ -174,3 +174,19 @@ module "athena" {
 
   depends_on = [module.s3]
 }
+
+# IAM module call
+module "iam" {
+  source = "./modules/iam"
+
+  project_name = var.project_name
+  environment  = var.environment
+
+  iam_role_name_suffix   = var.iam_role_name_suffix
+  iam_policy_name_suffix = var.iam_policy_name_suffix
+
+  trusted_principal_type        = var.iam_trusted_principal_type
+  trusted_principal_identifiers = var.iam_trusted_principal_identifiers
+
+  tags = var.tags
+}
