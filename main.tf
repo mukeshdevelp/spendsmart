@@ -174,7 +174,7 @@ module "athena" {
 
   depends_on = [module.s3]
 }
-
+/*
 # IAM module call
 module "iam" {
   source = "./modules/iam"
@@ -190,3 +190,4 @@ module "iam" {
 
   tags = var.tags
 }
+*/
