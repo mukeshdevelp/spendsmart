@@ -63,8 +63,8 @@ variable "bastion_allowed_ssh_cidrs" {
 
 variable "bastion_egress_cidrs" {
   description = "CIDR blocks allowed for bastion egress."
-  type        = list(string)
-  default     = []
+  type        = string
+
 }
 variable "vpc_id" {
   description = "VPC ID where the bastion security group and EC2 instance are created."

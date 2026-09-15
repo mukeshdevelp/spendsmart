@@ -1,82 +1,76 @@
-data "aws_iam_policy_document" "ec2_assume" {
-  statement {
-    actions = ["sts:AssumeRole"]
+# Bastion Security Group
+resource "aws_security_group" "bastion" {
+  name        = "${var.name_prefix}-bastion"
+  description = "Bastion host in a public subnet"
+  vpc_id      = var.vpc_id
 
-    principals {
-      type        = "Service"
-      identifiers = ["ec2.amazonaws.com"]
-    }
+  tags = {
+    Name = "${var.name_prefix}-bastion"
   }
 }
 
 
-removed {
-  from = terraform_data.ssh_keypair
+# Bastion SSH Ingress
+resource "aws_vpc_security_group_ingress_rule" "bastion_ssh" {
+  for_each = toset(var.bastion_allowed_ssh_cidrs)
 
-  lifecycle {
-    destroy = false
-  }
+  security_group_id = aws_security_group.bastion.id
+
+  description = "SSH"
+  ip_protocol = "tcp"
+
+  from_port = var.bastion_ssh_port
+  to_port   = var.bastion_ssh_port
+
+  cidr_ipv4 = each.value
 }
 
-removed {
-  from = aws_secretsmanager_secret.ssh_private_key
+# Bastion Egress
+resource "aws_vpc_security_group_egress_rule" "bastion_all" {
 
-  lifecycle {
-    destroy = false
-  }
+
+  security_group_id = aws_security_group.bastion.id
+
+  description = "Bastion egress"
+  ip_protocol = "-1"
+
+  cidr_ipv4 = var.bastion_egress_cidrs
 }
 
-removed {
-  from = aws_iam_policy.ssh_key_download
-
-  lifecycle {
-    destroy = false
-  }
-}
-
-resource "aws_iam_role" "ec2_ssm" {
-  count = var.bastion_enabled ? 1 : 0
-
-  name               = "${var.name_prefix}-ec2-ssm"
-  assume_role_policy = data.aws_iam_policy_document.ec2_assume.json
-}
-
-resource "aws_iam_role_policy_attachment" "ec2_ssm" {
-  count = var.bastion_enabled ? 1 : 0
-
-  role       = aws_iam_role.ec2_ssm[0].name
-  policy_arn = var.ec2_ssm_policy_arn
-}
-
-resource "aws_iam_instance_profile" "ec2_ssm" {
-  count = var.bastion_enabled ? 1 : 0
-
-  name = "${var.name_prefix}-ec2-ssm"
-  role = aws_iam_role.ec2_ssm[0].name
-}
-
+# Existing EC2 Key Pair
 data "aws_key_pair" "selected" {
   key_name = var.ec2_key_name
 }
 
-data "aws_ssm_parameter" "bastion_ami" {
-  count = var.bastion_enabled ? 1 : 0
 
+
+# Amazon Linux AMI
+#
+# This uses SSM Parameter Store only to retrieve the AMI ID.
+# It does NOT give the EC2 instance SSM access.
+
+data "aws_ssm_parameter" "bastion_ami" {
   name = var.bastion_ami_ssm_parameter
 }
 
-resource "aws_instance" "bastion" {
-  count = var.bastion_enabled ? 1 : 0
 
-  ami           = data.aws_ssm_parameter.bastion_ami[0].value
+
+# Bastion EC2 Instance
+resource "aws_instance" "bastion" {
+  ami           = data.aws_ssm_parameter.bastion_ami.value
   instance_type = var.bastion_instance_type
-  subnet_id     = var.public_subnet_id
+
+  subnet_id = var.public_subnet_id
+
   vpc_security_group_ids = [
-    aws_security_group.bastion[0].id
+    aws_security_group.bastion.id
   ]
-  iam_instance_profile        = aws_iam_instance_profile.ec2_ssm[0].name
+
   associate_public_ip_address = true
-  key_name                    = data.aws_key_pair.selected.key_name
+
+  # Existing EC2 key pair.
+  # Used for normal SSH access.
+  key_name = data.aws_key_pair.selected.key_name
 
   metadata_options {
     http_endpoint               = "enabled"
@@ -96,49 +90,18 @@ resource "aws_instance" "bastion" {
   }
 }
 
-resource "aws_eip" "bastion" {
-  count = var.bastion_enabled && var.bastion_associate_eip ? 1 : 0
 
+# Bastion Elastic IP
+resource "aws_eip" "bastion" {
   domain   = "vpc"
-  instance = aws_instance.bastion[0].id
+  instance = aws_instance.bastion.id
 
   tags = {
     Name = "${var.name_prefix}-bastion-eip"
   }
 }
-# Bastion security group and rules are defined with the bastion host so the
-# module owns all resources required to operate it.
-resource "aws_security_group" "bastion" {
-  count = var.bastion_enabled ? 1 : 0
 
-  name        = "${var.name_prefix}-bastion"
-  description = "Bastion host in a public subnet"
-  vpc_id      = var.vpc_id
-  tags = {
-    Name = "${var.name_prefix}-bastion"
-  }
-}
 
-resource "aws_vpc_security_group_ingress_rule" "bastion_ssh" {
-  for_each = var.bastion_enabled ? toset(var.bastion_allowed_ssh_cidrs) : toset([])
 
-  security_group_id = aws_security_group.bastion[0].id
 
-  description = "SSH"
-  ip_protocol = "tcp"
-  from_port   = var.bastion_ssh_port
-  to_port     = var.bastion_ssh_port
 
-  cidr_ipv4 = each.value
-}
-
-resource "aws_vpc_security_group_egress_rule" "bastion_all" {
-  for_each = var.bastion_enabled ? toset(var.bastion_egress_cidrs) : toset([])
-
-  security_group_id = aws_security_group.bastion[0].id
-
-  description = "Bastion egress"
-  ip_protocol = "-1"
-
-  cidr_ipv4 = each.value
-}

@@ -1,8 +1,8 @@
 # env related stuff
-aws_region   = "us-east-1"
+aws_region     = "us-east-1"
 state_file_key = "aws/infra/terraform.tfstate"
-project_name = "spendsmart"
-environment  = "dev"
+project_name   = "spendsmart"
+environment    = "dev"
 # Tags configs
 tags = {
   Project     = "spendsmart"
@@ -13,18 +13,19 @@ tags = {
 availability_zones = []
 
 # network-skeleton module
-vpc_cidr                  = "10.0.0.0/16"
-public_subnet_cidrs       = ["10.0.0.0/24", "10.0.1.0/24"]
-private_subnet_cidrs      = ["10.0.2.0/24", "10.0.3.0/24"]
-enable_nat_gateway        = true
-enable_nat_per_az         = false
-enable_dns_hostnames      = true
-enable_dns_support        = true
-internet_route_cidr       = "0.0.0.0/0"
-bastion_enabled           = true
-bastion_ssh_port          = 22
+vpc_cidr             = "10.0.0.0/16"
+public_subnet_cidrs  = ["10.0.0.0/24", "10.0.1.0/24"]
+private_subnet_cidrs = ["10.0.2.0/24", "10.0.3.0/24"]
+enable_nat_gateway   = true
+enable_nat_per_az    = false
+enable_dns_hostnames = true
+enable_dns_support   = true
+internet_route_cidr  = "0.0.0.0/0"
+bastion_enabled      = true
+bastion_ssh_port     = 22
+# bastion allowed cidr: need to change so that whitelisted IPs can access the host
 bastion_allowed_ssh_cidrs = ["0.0.0.0/0"]
-bastion_egress_cidrs      = ["0.0.0.0/0"]
+bastion_egress_cidrs      = "0.0.0.0/0"
 
 # Existing EC2 key pair in this AWS account and region. Terraform looks it up
 # and attaches it to the bastion and all EKS worker nodes.
@@ -44,7 +45,7 @@ sg_protocol_all                                 = "-1"
 nodes_ssh_port                                  = 22
 nodes_egress_cidrs                              = ["10.0.0.0/16"]
 eks_cluster_name                                = "spendsmart"
-eks_cluster_version                             = "1.31"
+eks_cluster_version                             = "1.36"
 eks_endpoint_private_access                     = true
 eks_endpoint_public_access                      = false
 eks_public_access_cidrs                         = []

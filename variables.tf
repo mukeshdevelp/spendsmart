@@ -104,7 +104,7 @@ variable "bastion_associate_eip" {
 
 variable "bastion_egress_cidrs" {
   description = "CIDR blocks allowed for bastion egress."
-  type        = list(string)
+  type        = string
 }
 
 variable "bastion_root_volume_size" {
