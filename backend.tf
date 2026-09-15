@@ -3,9 +3,9 @@
 # `terraform init -migrate-state`.
 terraform {
   backend "s3" {
-    bucket       = var.bucket_name
-    key          = var.state_file_key
-    region       = var.aws_region
+    bucket       = "spendsmart-dev-123456789012"
+    key          = "aws/infra/terraform.tfstate"
+    region       = "us-east-1"
     encrypt      = true
     use_lockfile = true
   }
