@@ -109,7 +109,7 @@ module "eks" {
   eks_nodes_egress_description                    = var.eks_nodes_egress_description
   alb_enabled                                     = var.alb_enabled
   alb_internal                                    = var.alb_internal
-  alb_allowed_ingress_cidrs                       = var.alb_allowed_ingress_cidrs
+  alb_allowed_ingress_cidr                        = var.alb_allowed_ingress_cidr
   alb_security_group_name_suffix                  = var.alb_security_group_name_suffix
   alb_security_group_description                  = var.alb_security_group_description
   alb_ingress_rule_description                    = var.alb_ingress_rule_description

@@ -1,6 +1,6 @@
 # EKS CLUSTER IAM ROLE
- 
-# generates trust policy JSON
+
+# generated trust policy JSON for cluster
 data "aws_iam_policy_document" "eks_cluster_assume" {
   statement {
     actions = ["sts:AssumeRole"]
@@ -11,6 +11,7 @@ data "aws_iam_policy_document" "eks_cluster_assume" {
     }
   }
 }
+
 # creating a role with the above create policy document
 resource "aws_iam_role" "eks_cluster" {
   name               = local.eks_cluster_role_name
@@ -22,6 +23,7 @@ resource "aws_iam_role_policy_attachment" "eks_cluster" {
   role       = aws_iam_role.eks_cluster.name
   policy_arn = var.eks_cluster_policy_arn
 }
+
 # attaching vpc controller policy to the role
 resource "aws_iam_role_policy_attachment" "eks_vpc_resource_controller" {
   role       = aws_iam_role.eks_cluster.name
@@ -29,9 +31,9 @@ resource "aws_iam_role_policy_attachment" "eks_vpc_resource_controller" {
 }
 
 
- 
+
 # EKS NODE IAM ROLE
- 
+
 # generates trust policy JSON for node
 data "aws_iam_policy_document" "eks_node_assume" {
   statement {
@@ -43,16 +45,19 @@ data "aws_iam_policy_document" "eks_node_assume" {
     }
   }
 }
+
 # create a role with above policy document
 resource "aws_iam_role" "eks_nodes" {
   name               = local.eks_nodes_role_name
   assume_role_policy = data.aws_iam_policy_document.eks_node_assume.json
 }
+
 # attaching the managed policy to the role
 resource "aws_iam_role_policy_attachment" "eks_worker" {
   role       = aws_iam_role.eks_nodes.name
   policy_arn = var.eks_node_worker_policy_arn
 }
+
 # attaches the AWS CNI permissions policy to your EKS worker-node IAM role
 resource "aws_iam_role_policy_attachment" "eks_cni" {
   role       = aws_iam_role.eks_nodes.name
@@ -66,9 +71,9 @@ resource "aws_iam_role_policy_attachment" "eks_ecr" {
 }
 
 
- 
+
 # EKS CLUSTER
- 
+
 # cluster
 resource "aws_eks_cluster" "this" {
   name     = var.eks_cluster_name
@@ -93,9 +98,9 @@ resource "aws_eks_cluster" "this" {
 }
 
 
- 
+
 # EKS NODE SECURITY GROUP
- 
+
 # security group for EKS nodes
 resource "aws_security_group" "eks_nodes" {
   name        = local.eks_nodes_security_group_name
@@ -107,6 +112,7 @@ resource "aws_security_group" "eks_nodes" {
     (local.eks_nodes_cluster_tag_key) = var.eks_nodes_cluster_tag_value
   }
 }
+
 # security group ingress for node to node communication
 resource "aws_vpc_security_group_ingress_rule" "nodes_self" {
   security_group_id            = aws_security_group.eks_nodes.id
@@ -114,6 +120,7 @@ resource "aws_vpc_security_group_ingress_rule" "nodes_self" {
   ip_protocol                  = "-1"
   referenced_security_group_id = aws_security_group.eks_nodes.id
 }
+
 # security group ingress for node - allows ssh access from bastion to nodes
 resource "aws_vpc_security_group_ingress_rule" "nodes_ssh_from_bastion" {
   # count = var.bastion_enabled ? 1 : 0
@@ -136,10 +143,10 @@ resource "aws_vpc_security_group_egress_rule" "nodes_egress" {
 }
 
 
- 
-# ALB SECURITY GROUP
- 
 
+# ALB SECURITY GROUP
+
+# security group for alb
 resource "aws_security_group" "alb" {
   name        = local.alb_security_group_name
   description = var.alb_security_group_description
@@ -149,7 +156,7 @@ resource "aws_security_group" "alb" {
     Name = local.alb_security_group_name
   }
 }
-
+# security group ingress for alb listener
 resource "aws_vpc_security_group_ingress_rule" "alb_listener" {
 
   security_group_id = aws_security_group.alb.id
@@ -160,7 +167,7 @@ resource "aws_vpc_security_group_ingress_rule" "alb_listener" {
   cidr_ipv4         = var.alb_allowed_ingress_cidr
 
 }
-
+# security group egress for alb to nodes
 resource "aws_vpc_security_group_egress_rule" "alb_to_nodes" {
   security_group_id            = aws_security_group.alb.id
   description                  = var.alb_egress_to_nodes_description
@@ -169,7 +176,7 @@ resource "aws_vpc_security_group_egress_rule" "alb_to_nodes" {
   to_port                      = var.alb_target_port
   referenced_security_group_id = aws_security_group.eks_nodes.id
 }
-
+# ingress rules for nodes from alb
 resource "aws_vpc_security_group_ingress_rule" "nodes_from_alb" {
   security_group_id            = aws_security_group.eks_nodes.id
   description                  = var.eks_nodes_alb_ingress_description
@@ -180,10 +187,10 @@ resource "aws_vpc_security_group_ingress_rule" "nodes_from_alb" {
 }
 
 
- 
-# EKS NODE LAUNCH TEMPLATE
- 
 
+# EKS NODE LAUNCH TEMPLATE
+
+# launch template for nodes
 resource "aws_launch_template" "eks_nodes" {
   name_prefix = local.eks_node_launch_template_prefix
 
@@ -221,10 +228,10 @@ resource "aws_launch_template" "eks_nodes" {
 }
 
 
- 
-# EKS NODE GROUPS
- 
 
+# EKS NODE GROUPS
+
+# node group
 resource "aws_eks_node_group" "this" {
   for_each = var.private_subnet_map
 
@@ -268,10 +275,10 @@ resource "aws_eks_node_group" "this" {
 }
 
 
- 
-# EKS ADDONS
- 
 
+# EKS ADDONS
+
+# add ons - include kube proxy, cni
 resource "aws_eks_addon" "this" {
   for_each = toset(var.eks_addons)
 
@@ -282,9 +289,9 @@ resource "aws_eks_addon" "this" {
 }
 
 
- 
-# APPLICATION LOAD BALANCER
- 
+
+# Application load balancer
+
 
 resource "aws_lb" "load_balancer" {
   name               = local.alb_name
