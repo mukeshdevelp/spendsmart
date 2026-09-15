@@ -24,8 +24,7 @@ output "eks_node_group_names" {
 }
 
 output "alb_security_group_id" {
-  description = "ALB security group ID."
-  value       = var.alb_enabled ? aws_security_group.alb[0].id : null
+  value = aws_security_group.alb.id
 }
 
 output "eks_nodes_security_group_id" {
@@ -34,16 +33,12 @@ output "eks_nodes_security_group_id" {
 }
 
 output "alb_dns_name" {
-  description = "ALB DNS name."
-  value       = var.alb_enabled ? aws_lb.load_balancer[0].dns_name : null
+  value = aws_lb.load_balancer.dns_name
 }
-
 output "alb_arn" {
-  description = "ALB ARN."
-  value       = var.alb_enabled ? aws_lb.load_balancer[0].arn : null
+  value = aws_lb.load_balancer.arn
 }
 
 output "alb_target_group_arn" {
-  description = "ALB target group ARN."
-  value       = var.alb_enabled ? aws_lb_target_group.target_group_eks[0].arn : null
+  value = aws_lb_target_group.target_group_eks.arn
 }

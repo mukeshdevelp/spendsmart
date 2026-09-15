@@ -33,7 +33,7 @@ module "bastion" {
 
   ec2_key_name = var.ec2_key_name
 
-  ec2_ssm_policy_arn = var.ec2_ssm_policy_arn
+  #ec2_ssm_policy_arn = var.ec2_ssm_policy_arn
 
   bastion_ssh_port          = var.bastion_ssh_port
   bastion_allowed_ssh_cidrs = var.bastion_allowed_ssh_cidrs
@@ -60,7 +60,7 @@ module "eks" {
   eks_cluster_version                             = var.eks_cluster_version
   eks_endpoint_private_access                     = var.eks_endpoint_private_access
   eks_endpoint_public_access                      = var.eks_endpoint_public_access
-  eks_public_access_cidrs                         = var.eks_public_access_cidrs
+# eks_public_access_cidrs                         = var.eks_public_access_cidrs
   eks_authentication_mode                         = var.eks_authentication_mode
   eks_bootstrap_cluster_creator_admin_permissions = var.eks_bootstrap_cluster_creator_admin_permissions
   eks_assume_role_action                          = var.eks_assume_role_action
@@ -75,7 +75,7 @@ module "eks" {
   eks_node_worker_policy_arn                      = var.eks_node_worker_policy_arn
   eks_node_cni_policy_arn                         = var.eks_node_cni_policy_arn
   eks_node_ecr_policy_arn                         = var.eks_node_ecr_policy_arn
-  eks_node_ssm_policy_arn                         = var.eks_node_ssm_policy_arn
+  #eks_node_ssm_policy_arn                         = var.eks_node_ssm_policy_arn
   eks_node_instance_types                         = var.eks_node_instance_types
   eks_node_desired_size                           = var.eks_node_desired_size
   eks_node_min_size                               = var.eks_node_min_size
@@ -107,7 +107,7 @@ module "eks" {
   eks_nodes_alb_ingress_description               = var.eks_nodes_alb_ingress_description
   eks_nodes_ssh_ingress_description               = var.eks_nodes_ssh_ingress_description
   eks_nodes_egress_description                    = var.eks_nodes_egress_description
-  alb_enabled                                     = var.alb_enabled
+  #alb_enabled                                     = var.alb_enabled
   alb_internal                                    = var.alb_internal
   alb_allowed_ingress_cidr                        = var.alb_allowed_ingress_cidr
   alb_security_group_name_suffix                  = var.alb_security_group_name_suffix
@@ -119,7 +119,7 @@ module "eks" {
   alb_listener_protocol                           = var.alb_listener_protocol
   alb_listener_protocol_https                     = var.alb_listener_protocol_https
   alb_listener_action_type                        = var.alb_listener_action_type
-  alb_ssl_policy                                  = var.alb_ssl_policy
+  #alb_ssl_policy                                  = var.alb_ssl_policy
   alb_certificate_arn                             = var.alb_certificate_arn
   alb_target_port                                 = var.alb_target_port
   alb_target_group_name_suffix                    = var.alb_target_group_name_suffix
@@ -174,7 +174,7 @@ module "athena" {
 
   depends_on = [module.s3]
 }
-/*
+
 # IAM module call
 module "iam" {
   source = "./modules/iam"
@@ -190,4 +190,3 @@ module "iam" {
 
   tags = var.tags
 }
-*/

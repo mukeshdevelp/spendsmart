@@ -121,12 +121,12 @@ variable "bastion_ami_ssm_parameter" {
   description = "SSM parameter path for the bastion AMI."
   type        = string
 }
-
+/*
 variable "ec2_ssm_policy_arn" {
   description = "IAM policy ARN for SSM on the bastion."
   type        = string
 }
-
+*/
 variable "nodes_ssh_port" {
   description = "SSH port on EKS nodes."
   type        = number
@@ -169,11 +169,13 @@ variable "eks_endpoint_public_access" {
   type        = bool
 }
 
+
+/*
 variable "eks_public_access_cidrs" {
   description = "CIDR blocks allowed to reach the public EKS API endpoint."
-  type        = list(string)
+  type        = string
 }
-
+*/
 variable "eks_authentication_mode" {
   description = "EKS cluster authentication mode."
   type        = string
@@ -419,17 +421,18 @@ variable "eks_node_ecr_policy_arn" {
   description = "IAM policy ARN for ECR read access on nodes."
   type        = string
 }
-
+/*
 variable "eks_node_ssm_policy_arn" {
   description = "IAM policy ARN for SSM on EKS nodes."
   type        = string
 }
-
+*/
+/*
 variable "alb_enabled" {
   description = "Create an internet-facing Application Load Balancer in the public subnets."
   type        = bool
 }
-
+*/
 variable "alb_internal" {
   description = "If true, create an internal ALB instead of an internet-facing ALB."
   type        = bool
@@ -497,12 +500,12 @@ variable "alb_certificate_arn" {
   type        = string
   default     = ""
 }
-
+/*
 variable "alb_ssl_policy" {
   description = "SSL policy for HTTPS listeners."
   type        = string
 }
-
+*/
 variable "alb_target_port" {
   description = "Target group port (typically a NodePort or pod port exposed on EKS nodes)."
   type        = number

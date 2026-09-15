@@ -79,12 +79,12 @@ variable "eks_endpoint_public_access" {
   description = "Enable the public EKS API endpoint."
   type        = bool
 }
-
+/*
 variable "eks_public_access_cidrs" {
   description = "CIDR blocks allowed to reach the public EKS API endpoint."
-  type        = list(string)
+  type        = string
 }
-
+*/
 variable "eks_authentication_mode" {
   description = "EKS cluster authentication mode."
   type        = string
@@ -163,12 +163,12 @@ variable "eks_node_ecr_policy_arn" {
   description = "IAM policy ARN for ECR read access on nodes."
   type        = string
 }
-
+/*
 variable "eks_node_ssm_policy_arn" {
   description = "IAM policy ARN for SSM on EKS nodes."
   type        = string
 }
-
+*/
 variable "eks_node_instance_types" {
   description = "Instance types for EKS managed node groups."
   type        = list(string)
@@ -341,12 +341,12 @@ variable "eks_nodes_egress_description" {
   type        = string
   default     = "Node egress"
 }
-
+/*
 variable "alb_enabled" {
   description = "Create an Application Load Balancer."
   type        = bool
 }
-
+*/
 variable "alb_internal" {
   description = "Create an internal ALB."
   type        = bool
@@ -408,12 +408,12 @@ variable "alb_listener_action_type" {
   type        = string
   default     = "forward"
 }
-
+/*
 variable "alb_ssl_policy" {
   description = "SSL policy for HTTPS listeners."
   type        = string
 }
-
+*/
 variable "alb_certificate_arn" {
   description = "ACM certificate ARN for HTTPS listener."
   type        = string

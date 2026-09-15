@@ -42,12 +42,12 @@ variable "ec2_key_name" {
   description = "Name of an existing EC2 key pair to validate and attach to EC2 instances."
   type        = string
 }
-
+/*
 variable "ec2_ssm_policy_arn" {
   description = "IAM policy ARN for SSM on the bastion."
   type        = string
 }
-
+*/  
 
 variable "bastion_ssh_port" {
   description = "TCP port for SSH ingress to the bastion security group."

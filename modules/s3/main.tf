@@ -1,8 +1,11 @@
 # S3 bucket for application data and Athena results
 resource "aws_s3_bucket" "this" {
-  
+
   bucket        = var.bucket_name
   force_destroy = var.force_destroy
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # bucket versioning

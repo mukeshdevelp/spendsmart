@@ -1,4 +1,4 @@
- 
+
 # General configs
 aws_region     = "us-east-1"
 state_file_key = "aws/infra/terraform.tfstate"
@@ -12,9 +12,9 @@ tags = {
 }
 
 
- 
+
 # Network Module configs
- 
+
 availability_zones = []
 
 vpc_cidr             = "10.0.0.0/16"
@@ -29,7 +29,7 @@ enable_dns_support   = true
 internet_route_cidr = "0.0.0.0/0"
 
 
- 
+
 # Bastion Module configs
 bastion_enabled = true
 
@@ -53,9 +53,9 @@ bastion_ami_ssm_parameter = "/aws/service/ami-amazon-linux-latest/al2023-ami-ker
 bastion_associate_eip = true
 
 
- 
+
 # EKS configs
- 
+
 
 nodes_ssh_port     = 22
 nodes_egress_cidrs = ["10.0.0.0/16"]
@@ -116,7 +116,7 @@ eks_node_metadata_http_put_response_hop_limit = 2
 eks_node_launch_template_name_suffix = "-ng-"
 eks_node_instance_name_suffix        = "-eks-node"
 eks_node_group_tag_name_suffix       = "-node-group-"
-eks_node_group_name_prefix            = "node-group-"
+eks_node_group_name_prefix           = "node-group-"
 
 
 # Node Group
@@ -142,7 +142,7 @@ eks_nodes_security_group_description = "Additional security group for EKS worker
 eks_nodes_security_group_name_suffix = "-eks-nodes"
 
 eks_nodes_cluster_tag_key_prefix = "kubernetes.io/cluster/"
-eks_nodes_cluster_tag_value       = "owned"
+eks_nodes_cluster_tag_value      = "owned"
 
 eks_nodes_self_ingress_description = "Node to node"
 eks_nodes_alb_ingress_description  = "ALB to node target port"
@@ -150,7 +150,7 @@ eks_nodes_ssh_ingress_description  = "SSH from bastion"
 eks_nodes_egress_description       = "Node egress"
 
 
- 
+
 # ALB
 alb_internal = false
 
@@ -175,22 +175,22 @@ alb_listener_action_type = "forward"
 
 alb_target_port = 30080
 
-alb_target_group_name_suffix    = "-eks"
+alb_target_group_name_suffix     = "-eks"
 alb_target_group_tag_name_suffix = "-eks-tg"
 
 alb_target_group_protocol = "HTTP"
 
 alb_health_check_path                = "/healthz"
 alb_health_check_matcher             = "200-399"
-alb_health_check_interval             = 30
-alb_health_check_timeout               = 5
-alb_health_check_healthy_threshold    = 2
-alb_health_check_unhealthy_threshold  = 3
+alb_health_check_interval            = 30
+alb_health_check_timeout             = 5
+alb_health_check_healthy_threshold   = 2
+alb_health_check_unhealthy_threshold = 3
 
 
- 
+
 # S3
- 
+
 
 bucket_name = ""
 
@@ -212,7 +212,7 @@ athena_lifecycle_rule_id       = "expire-athena-results"
 athena_results_expiration_days = 30
 
 
- 
+
 # GLUE / ATHENA
 
 glue_database_name          = "spendsmart_analytics"
@@ -220,9 +220,8 @@ athena_workgroup_name       = "spendsmart"
 athena_bytes_scanned_cutoff = 10737418240
 
 
- 
+
 # IAM Module for analytics
- 
 iam_role_name_suffix   = "-analytics-role"
 iam_policy_name_suffix = "-analytics-policy"
 
