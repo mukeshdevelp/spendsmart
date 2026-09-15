@@ -352,9 +352,9 @@ variable "alb_internal" {
   type        = bool
 }
 
-variable "alb_allowed_ingress_cidrs" {
+variable "alb_allowed_ingress_cidr" {
   description = "CIDR blocks allowed to reach the ALB listener."
-  type        = list(string)
+  type        = string
 }
 
 variable "alb_security_group_name_suffix" {
