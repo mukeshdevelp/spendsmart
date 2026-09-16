@@ -12,7 +12,7 @@ properties([
 node {
     terraformInfra(
         awsRegion: 'us-east-1',
-        terraformDir: 'spendsmart',
+        terraformDir: '.',
         stateBucketName: 'spendsmart-terraform-state',
         stateKey: 'aws/infra/terraform.tfstate',
         stateRegion: 'us-east-1',
