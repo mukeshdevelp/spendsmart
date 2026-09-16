@@ -47,7 +47,7 @@ variable "ec2_ssm_policy_arn" {
   description = "IAM policy ARN for SSM on the bastion."
   type        = string
 }
-*/  
+*/
 
 variable "bastion_ssh_port" {
   description = "TCP port for SSH ingress to the bastion security group."

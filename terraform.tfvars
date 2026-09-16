@@ -192,7 +192,7 @@ alb_health_check_unhealthy_threshold = 3
 # S3
 
 
-bucket_name = ""
+bucket_name = "athena-results-spendsmart-dev"
 
 data_prefix           = "data"
 athena_results_prefix = "athena-results"
