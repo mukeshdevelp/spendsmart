@@ -15,6 +15,7 @@ node {
         terraformDir: 'spendsmart',
         stateBucketName: 'spendsmart-terraform-state',
         stateKey: 'aws/infra/terraform.tfstate',
+        stateRegion: 'us-east-1',
         awsCredentialId: 'aws-creds'
     )
 }
