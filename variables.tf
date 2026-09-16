@@ -396,7 +396,7 @@ variable "eks_addons" {
   description = "EKS add-on names to install after node groups are ready."
   type        = list(string)
 }
-
+/*
 variable "eks_cluster_policy_arn" {
   description = "IAM policy ARN attached to the EKS cluster role."
   type        = string
@@ -421,6 +421,7 @@ variable "eks_node_ecr_policy_arn" {
   description = "IAM policy ARN for ECR read access on nodes."
   type        = string
 }
+*/
 /*
 variable "eks_node_ssm_policy_arn" {
   description = "IAM policy ARN for SSM on EKS nodes."

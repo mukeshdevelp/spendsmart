@@ -174,7 +174,7 @@ alb_listener_protocol = "HTTP"
 
 alb_listener_action_type = "forward"
 
-alb_target_port = 30080
+alb_target_port = 30080 
 
 alb_target_group_name_suffix     = "-eks"
 alb_target_group_tag_name_suffix = "-eks-tg"
