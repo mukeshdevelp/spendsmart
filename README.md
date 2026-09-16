@@ -16,6 +16,7 @@ This Terraform project provisions the core AWS infrastructure required by SpendS
 * Amazon Athena workgroup.
 * IAM roles and policies for analytics services.
 
+<img width="727" height="810" alt="image" src="https://github.com/user-attachments/assets/fd7b5b04-289d-40c4-b606-684b16524a43" />
 
 
 ## Usage
