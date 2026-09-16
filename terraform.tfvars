@@ -227,7 +227,3 @@ iam_policy_name_suffix = "-analytics-policy"
 
 iam_trusted_principal_type = "AWS"
 
-iam_trusted_principal_identifiers = [
-  # replace it with customer account id
-  "arn:aws:iam::092954140418:root"
-]
