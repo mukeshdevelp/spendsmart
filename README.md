@@ -22,64 +22,81 @@ This Terraform project provisions the core AWS infrastructure required by SpendS
 
 ```hcl
 provider "aws" {
-  region = "us-east-1"
+  region = var.aws_region
+
+  default_tags {
+    tags = var.tags
+  }
 }
 
-module "spendsmart" {
-  source = "./"
+# cluster
+resource "aws_eks_cluster" "this" {
+  name     = var.eks_cluster_name
+  role_arn = aws_iam_role.eks_cluster.arn
+  version  = var.eks_cluster_version
 
-  project_name = "spendsmart"
-  environment  = "dev"
+  vpc_config {
+    subnet_ids              = var.private_subnet_ids
+    endpoint_private_access = var.eks_endpoint_private_access
+    endpoint_public_access  = var.eks_endpoint_public_access
+  }
 
-  aws_region = "us-east-1"
+  access_config {
+    authentication_mode                         = var.eks_authentication_mode
+    bootstrap_cluster_creator_admin_permissions = var.eks_bootstrap_cluster_creator_admin_permissions
+  }
 
-  vpc_cidr = "10.0.0.0/16"
-
-  availability_zones = [
-    "us-east-1a",
-    "us-east-1b"
+  depends_on = [
+    aws_iam_role_policy_attachment.eks_cluster,
+    aws_iam_role_policy_attachment.eks_vpc_resource_controller
   ]
-
-  public_subnet_cidrs = [
-    "10.0.0.0/24",
-    "10.0.1.0/24"
-  ]
-
-  private_subnet_cidrs = [
-    "10.0.2.0/24",
-    "10.0.3.0/24"
-  ]
-
-  enable_nat_gateway = true
-  enable_nat_per_az  = false
-
-  ec2_key_name = "observability.pem"
-
-  eks_cluster_name    = "spendsmart"
-  eks_cluster_version = "1.36"
-
-  eks_endpoint_private_access = true
-  eks_endpoint_public_access  = false
-
-  eks_node_instance_types = [
-    "c7i-flex.large"
-  ]
-
-  eks_node_desired_size = 1
-  eks_node_min_size     = 1
-  eks_node_max_size     = 3
-
-  eks_node_capacity_type = "ON_DEMAND"
-
-  alb_internal             = false
-  alb_listener_port        = 80
-  alb_listener_protocol    = "HTTP"
-  alb_target_port          = 30080
-  alb_target_group_protocol = "HTTP"
-  alb_health_check_path    = "/healthz"
-
-  bucket_force_destroy = false
 }
+
+
+
+# EKS NODE SECURITY GROUP
+
+# security group for EKS nodes
+resource "aws_security_group" "eks_nodes" {
+  name        = local.eks_nodes_security_group_name
+  description = var.eks_nodes_security_group_description
+  vpc_id      = var.vpc_id
+
+  tags = {
+    Name                              = local.eks_nodes_security_group_name
+    (local.eks_nodes_cluster_tag_key) = var.eks_nodes_cluster_tag_value
+  }
+}
+
+# security group ingress for node to node communication
+resource "aws_vpc_security_group_ingress_rule" "nodes_self" {
+  security_group_id            = aws_security_group.eks_nodes.id
+  description                  = var.eks_nodes_self_ingress_description
+  ip_protocol                  = "-1"
+  referenced_security_group_id = aws_security_group.eks_nodes.id
+}
+
+# security group ingress for node - allows ssh access from bastion to nodes
+resource "aws_vpc_security_group_ingress_rule" "nodes_ssh_from_bastion" {
+  # count = var.bastion_enabled ? 1 : 0
+
+  security_group_id            = aws_security_group.eks_nodes.id
+  description                  = var.eks_nodes_ssh_ingress_description
+  ip_protocol                  = "tcp"
+  from_port                    = var.nodes_ssh_port
+  to_port                      = var.nodes_ssh_port
+  referenced_security_group_id = var.bastion_security_group_id
+}
+
+resource "aws_vpc_security_group_egress_rule" "nodes_egress" {
+  for_each = toset(var.nodes_egress_cidrs)
+
+  security_group_id = aws_security_group.eks_nodes.id
+  description       = var.eks_nodes_egress_description
+  ip_protocol       = "-1"
+  cidr_ipv4         = each.value
+}
+
 ```
 
 Initialize Terraform:
