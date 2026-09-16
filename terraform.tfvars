@@ -47,7 +47,7 @@ ec2_key_name = "observability.pem"
 bastion_instance_type    = "t3.micro"
 bastion_root_volume_size = 8
 bastion_root_volume_type = "gp3"
-
+# actual ami id
 bastion_ami_ssm_parameter = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
 
 bastion_associate_eip = true
@@ -77,17 +77,17 @@ eks_nodes_role_name_suffix   = "-eks-nodes"
 
 
 # EKS CLUSTER IAM POLICIES
-eks_cluster_policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
+# eks_cluster_policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
 
-eks_vpc_resource_controller_policy_arn = "arn:aws:iam::aws:policy/AmazonEKSVPCResourceController"
+# eks_vpc_resource_controller_policy_arn = "arn:aws:iam::aws:policy/AmazonEKSVPCResourceController"
 
 
 # EKS NODE IAM POLICIES
-eks_node_worker_policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+# eks_node_worker_policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
 
-eks_node_cni_policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+# eks_node_cni_policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
 
-eks_node_ecr_policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+# eks_node_ecr_policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 
 
 # NODE CONFIGURATION
@@ -121,6 +121,7 @@ eks_node_group_name_prefix           = "node-group-"
 
 # Node Group
 eks_node_capacity_type = "ON_DEMAND"
+# AMI type
 eks_node_ami_type      = "AL2023_x86_64_STANDARD"
 
 eks_node_az_label_key = "spendsmart.io/az"
@@ -217,6 +218,7 @@ athena_results_expiration_days = 30
 
 glue_database_name          = "spendsmart_analytics"
 athena_workgroup_name       = "spendsmart"
+# Amazon Athena query data-scanned limit
 athena_bytes_scanned_cutoff = 10737418240
 
 

@@ -70,11 +70,11 @@ module "eks" {
   eks_node_assume_role_service                    = var.eks_node_assume_role_service
   eks_cluster_role_name_suffix                    = var.eks_cluster_role_name_suffix
   eks_nodes_role_name_suffix                      = var.eks_nodes_role_name_suffix
-  eks_cluster_policy_arn                          = var.eks_cluster_policy_arn
-  eks_vpc_resource_controller_policy_arn          = var.eks_vpc_resource_controller_policy_arn
-  eks_node_worker_policy_arn                      = var.eks_node_worker_policy_arn
-  eks_node_cni_policy_arn                         = var.eks_node_cni_policy_arn
-  eks_node_ecr_policy_arn                         = var.eks_node_ecr_policy_arn
+  eks_cluster_policy_arn                          = local.eks_cluster_policy_arn
+  eks_vpc_resource_controller_policy_arn          = local.eks_vpc_resource_controller_policy_arn
+  eks_node_worker_policy_arn                      = local.eks_node_worker_policy_arn
+  eks_node_cni_policy_arn                         = local.eks_node_cni_policy_arn
+  eks_node_ecr_policy_arn                         = local.eks_node_ecr_policy_arn
   #eks_node_ssm_policy_arn                         = var.eks_node_ssm_policy_arn
   eks_node_instance_types                       = var.eks_node_instance_types
   eks_node_desired_size                         = var.eks_node_desired_size
