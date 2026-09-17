@@ -98,37 +98,7 @@ resource "aws_vpc_security_group_egress_rule" "nodes_egress" {
   cidr_ipv4         = each.value
 }
 
-```
 
-Initialize Terraform:
-
-```bash
-terraform init
-```
-
-Validate the configuration:
-
-```bash
-terraform validate
-```
-
-Create an execution plan:
-
-```bash
-terraform plan
-```
-
-Deploy the infrastructure:
-
-```bash
-terraform apply
-```
-
-Destroy the infrastructure:
-
-```bash
-terraform destroy
-```
 
 ## Inputs
 
