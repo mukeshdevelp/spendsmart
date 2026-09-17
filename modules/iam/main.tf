@@ -1,4 +1,4 @@
-#  policy fetching
+#  generate an IAM policy document (JSON)
 data "aws_iam_policy_document" "analytics" {
 
   statement {
@@ -199,7 +199,7 @@ data "aws_iam_policy_document" "analytics" {
   }
 }
 
-# attach policy to role
+# who is allowed to assume an IAM role.
 data "aws_iam_policy_document" "assume_role" {
 
   statement {
@@ -217,7 +217,7 @@ data "aws_iam_policy_document" "assume_role" {
   }
 }
 
-
+# creates and IAM  role
 resource "aws_iam_role" "analytics" {
   name = "${var.project_name}-${var.environment}${var.iam_role_name_suffix}"
 
@@ -231,7 +231,7 @@ resource "aws_iam_role" "analytics" {
   )
 }
 
-
+# creates an IAM policy
 resource "aws_iam_policy" "analytics" {
   name        = "${var.project_name}-${var.environment}${var.iam_policy_name_suffix}"
   description = "Analytics, cost, AWS infrastructure and service metadata access"
@@ -246,7 +246,7 @@ resource "aws_iam_policy" "analytics" {
   )
 }
 
-
+# attaches your IAM policy to IAM role
 resource "aws_iam_role_policy_attachment" "analytics" {
   role       = aws_iam_role.analytics.name
   policy_arn = aws_iam_policy.analytics.arn
