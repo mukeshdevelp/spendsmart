@@ -176,6 +176,4 @@ This project is composed of the following Terraform modules.
 * `athena` - Terraform module for Amazon Athena workgroup.
 * `iam` - Terraform module for analytics IAM roles and policies.
 
-### Contributors
 
-* Opstree DevOps Team
