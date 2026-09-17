@@ -97,7 +97,7 @@ resource "aws_vpc_security_group_egress_rule" "nodes_egress" {
   ip_protocol       = "-1"
   cidr_ipv4         = each.value
 }
-
+```
 
 
 ## Inputs
