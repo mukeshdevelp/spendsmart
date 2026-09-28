@@ -15,3 +15,4 @@ override.tf.json
 tfplan-*
 tfplan
 *-iam
+.venv

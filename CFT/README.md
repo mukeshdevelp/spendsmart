@@ -57,7 +57,7 @@ All infrastructure input/configuration values are exposed as CloudFormation para
 
 1. Use AWS CLI v2 with credentials authorized to create VPC, EC2, EKS, IAM, ELB, S3, Glue, and Athena resources. The stack creates named IAM resources, so deployment requires `CAPABILITY_NAMED_IAM`.
 2. Choose a region with at least two available Availability Zones and support for the selected EKS Kubernetes version and EC2 instance type.
-3. Create an EC2 key pair in that region. Update `Ec2KeyName` in `parameters.json` to its exact key-pair name; the Terraform value `observability.pem` is only a starting value and may not be the AWS key-pair name.
+3. `Ec2KeyName` in `parameters.json` is set to `observabilty.pem`, the key-pair name verified in `us-east-1`. Keep the spelling exact and use this stack in the same region.
 4. Change `BastionSshCidr` in `parameters.json` from `0.0.0.0/0` to your trusted public IP in CIDR notation, such as `203.0.113.10/32`.
 5. S3 bucket names are globally unique. Change `S3BucketName` in `parameters.json` if `athena-results-spendsmart-dev` is already taken.
 6. Review `EksNodesEgressCidr`. Its default, `10.0.0.0/16`, matches Terraform but only allows node egress within the VPC. This can prevent image pulls and external access through the NAT gateway. Set it to `0.0.0.0/0` or provide suitable VPC endpoints and security-group rules.

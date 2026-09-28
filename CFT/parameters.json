@@ -1,7 +1,7 @@
 [
   {
     "ParameterKey": "Ec2KeyName",
-    "ParameterValue": "observability.pem"
+    "ParameterValue": "observabilty.pem"
   },
   {
     "ParameterKey": "BastionSshCidr",

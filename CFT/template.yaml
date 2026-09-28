@@ -1356,7 +1356,7 @@ Outputs:
   AnalyticsIamRoleArn:
     Value: !GetAtt AnalyticsRole.Arn
   AnalyticsIamPolicyName:
-    Value: !GetAtt AnalyticsPolicy.PolicyName
+    Value: !Sub '${NamePrefix}${AnalyticsPolicyNameSuffix}'
   AnalyticsIamPolicyArn:
     Value: !Ref AnalyticsPolicy
   VpcCidr:

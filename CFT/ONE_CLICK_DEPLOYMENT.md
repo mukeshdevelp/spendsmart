@@ -14,7 +14,7 @@ Do these checks once before creating the stack:
 
 1. Select the AWS account and region where the infrastructure should live. The example region below is `us-east-1`.
 2. Make sure the account has deployment permissions for CloudFormation, IAM, EC2/VPC, EKS, ELB, S3, Glue, and Athena. The IAM role names are explicit, so the deploy action must allow `CAPABILITY_NAMED_IAM`.
-3. Create or identify an EC2 key pair in the selected region. In `parameters.json`, `Ec2KeyName` must be the key-pair **name** shown by AWS, not the downloaded private-key filename. For example, use `observability` if the downloaded file is `observability.pem`.
+3. `parameters.json` uses the existing `us-east-1` EC2 key-pair name `observabilty.pem` (spelled exactly as AWS reports it). The parameter must be the key-pair **name**, not a different local private-key filename.
 4. Change `BastionSshCidr` in `parameters.json` to your public IP followed by `/32`, for example `203.0.113.10/32`. Do not leave `0.0.0.0/0` for production.
 5. Change `S3BucketName` in `parameters.json` to a name not already used anywhere in AWS. Bucket names are globally unique.
 6. Confirm that the selected region has at least two available AZs, EKS quota, NAT gateway/EIP quota, and support for `EksClusterVersion` and `EksNodeInstanceType` in `template.yaml`.
@@ -30,7 +30,7 @@ The template defaults to a private-only EKS API endpoint. Your computer must hav
 3. Choose **Upload a template file**, select `CFT/template.yaml`, and continue.
 4. Enter stack name `spendsmart-dev` (or another unique name), then continue.
 5. On the parameters page, keep the Terraform-matching defaults where suitable. Set at least:
-   - `Ec2KeyName`: existing regional key-pair name, without `.pem`.
+  - `Ec2KeyName`: `observabilty.pem`, the verified regional key-pair name.
    - `BastionSshCidr`: your trusted public IP CIDR, not `0.0.0.0/0`.
    - `S3BucketName`: globally unique bucket name.
    - `EksClusterVersion` and `EksNodeInstanceType`: versions/types available in this region.
@@ -181,7 +181,7 @@ Install AWS CLI v2, set credentials for the intended account, and edit `paramete
 aws cloudformation deploy \
   --template-file template.yaml \
   --stack-name spendsmart-dev \
-  --parameter-overrides Ec2KeyName=observability BastionSshCidr=203.0.113.10/32 S3BucketName=your-globally-unique-bucket-name \
+  --parameter-overrides Ec2KeyName=observabilty.pem BastionSshCidr=203.0.113.10/32 S3BucketName=your-globally-unique-bucket-name \
   --capabilities CAPABILITY_NAMED_IAM \
   --region us-east-1
 ```
@@ -254,7 +254,7 @@ These are different approaches. Configure the Helm chart and networking for the 
 | `InsufficientCapabilitiesException` | Named IAM resources were not acknowledged. | In the Console, acknowledge IAM resource creation. In CLI, include `--capabilities CAPABILITY_NAMED_IAM`. |
 | `CREATE_FAILED` for `EksCluster` due to version/platform | Kubernetes version is unsupported in the selected region, or EKS quota is exhausted. | Choose an EKS version currently offered in that region and confirm cluster quota before retrying. |
 | Node group fails or has zero ready nodes | Instance type unavailable, subnet/AZ capacity issue, IAM role issue, or required node network egress is blocked. | Check the node-group event reason; choose an available instance type, verify both private subnets and node IAM policies, and ensure required EKS/ECR/S3 connectivity through permitted security-group egress and NAT/VPC endpoints. |
-| `InvalidKeyPair.NotFound` or EC2 key validation failure | `Ec2KeyName` is a private-key filename or belongs to another region. | Enter the exact EC2 key-pair name from the target region; omit `.pem`. |
+| `InvalidKeyPair.NotFound` or EC2 key validation failure | `Ec2KeyName` is misspelled or belongs to another region. | Use the exact key-pair name from the target region. The verified `us-east-1` value is `observabilty.pem`. |
 | `BucketAlreadyExists` or bucket name conflict | The bucket name is globally allocated to another AWS account. | Change `S3BucketName` to a globally unique name and redeploy. |
 | NAT gateway or EIP quota error | Regional quotas or address limits are insufficient. | Request a quota increase, or set `EnableNatPerAz` to `false` for one NAT; set `EnableNatGateway` to `false` only if private subnet connectivity is not required/provided elsewhere. |
 | Subnet CIDR overlap or insufficient IP addresses | The default CIDRs conflict with an existing network or are too small for cluster resources. | Choose four non-overlapping CIDRs within `VpcCidr`; reserve adequate private subnet IP capacity for EKS ENIs and pods. |
