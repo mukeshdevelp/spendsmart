@@ -1,0 +1,14 @@
+[
+  {
+    "ParameterKey": "Ec2KeyName",
+    "ParameterValue": "observability.pem"
+  },
+  {
+    "ParameterKey": "BastionSshCidr",
+    "ParameterValue": "0.0.0.0/0"
+  },
+  {
+    "ParameterKey": "S3BucketName",
+    "ParameterValue": "athena-results-spendsmart-dev"
+  }
+]

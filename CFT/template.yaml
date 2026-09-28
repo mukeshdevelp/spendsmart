@@ -1,0 +1,913 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  SpendSmart network, bastion, EKS, ALB, S3, Glue, Athena, and analytics IAM
+  infrastructure translated from the Terraform configuration.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: spendsmart
+  Environment:
+    Type: String
+    Default: dev
+  VpcCidr:
+    Type: String
+    Default: 10.0.0.0/16
+  PublicSubnet1Cidr:
+    Type: String
+    Default: 10.0.0.0/24
+  PublicSubnet2Cidr:
+    Type: String
+    Default: 10.0.1.0/24
+  PrivateSubnet1Cidr:
+    Type: String
+    Default: 10.0.2.0/24
+  PrivateSubnet2Cidr:
+    Type: String
+    Default: 10.0.3.0/24
+  AvailabilityZone1:
+    Type: String
+    Default: ''
+    Description: Optional AZ override. Empty selects the first available AZ.
+  AvailabilityZone2:
+    Type: String
+    Default: ''
+    Description: Optional AZ override. Empty selects the second available AZ.
+  EnableNatGateway:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+  EnableNatPerAz:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+  BastionEnabled:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+  BastionAssociateEip:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+  BastionInstanceType:
+    Type: String
+    Default: t3.micro
+  BastionAmiSsmParameter:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+  BastionRootVolumeSize:
+    Type: Number
+    Default: 8
+  BastionRootVolumeType:
+    Type: String
+    Default: gp3
+  Ec2KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Existing EC2 key pair in the deployment region.
+  BastionSshCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: Restrict this to your trusted public IP/CIDR before deployment.
+  EksClusterName:
+    Type: String
+    Default: spendsmart
+  EksClusterVersion:
+    Type: String
+    Default: '1.36'
+  EksEndpointPrivateAccess:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+  EksEndpointPublicAccess:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+  EksNodeInstanceType:
+    Type: String
+    Default: c7i-flex.large
+  EksNodeDesiredSize:
+    Type: Number
+    Default: 1
+  EksNodeMinSize:
+    Type: Number
+    Default: 1
+  EksNodeMaxSize:
+    Type: Number
+    Default: 3
+  EksNodeDiskSize:
+    Type: Number
+    Default: 48
+  EksNodeAmiType:
+    Type: String
+    Default: AL2023_x86_64_STANDARD
+  EksNodeCapacityType:
+    Type: String
+    AllowedValues: [ON_DEMAND, SPOT]
+    Default: ON_DEMAND
+  EksNodesEgressCidr:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: Mirrors Terraform. Use 0.0.0.0/0 or add required VPC endpoints for external node access.
+  AlbInternal:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+  AlbIngressCidr:
+    Type: String
+    Default: 0.0.0.0/0
+  AlbListenerPort:
+    Type: Number
+    Default: 80
+  AlbTargetPort:
+    Type: Number
+    Default: 30080
+  AlbHealthCheckPath:
+    Type: String
+    Default: /healthz
+  S3BucketName:
+    Type: String
+    Default: athena-results-spendsmart-dev
+    Description: Must be globally unique. Change if this bucket name is already taken.
+  DataPrefix:
+    Type: String
+    Default: data
+  AthenaResultsPrefix:
+    Type: String
+    Default: athena-results
+  AthenaResultsExpirationDays:
+    Type: Number
+    Default: 30
+  GlueDatabaseName:
+    Type: String
+    Default: spendsmart_analytics
+  AthenaWorkgroupName:
+    Type: String
+    Default: spendsmart
+  AthenaBytesScannedCutoff:
+    Type: Number
+    Default: 10737418240
+Conditions:
+  UseDefaultAz1: !Equals [!Ref AvailabilityZone1, '']
+  UseDefaultAz2: !Equals [!Ref AvailabilityZone2, '']
+  NatEnabled: !Equals [!Ref EnableNatGateway, 'true']
+  NatPerAz: !And
+    - !Condition NatEnabled
+    - !Equals [!Ref EnableNatPerAz, 'true']
+  CreateBastion: !Equals [!Ref BastionEnabled, 'true']
+  CreateBastionEip: !And
+    - !Condition CreateBastion
+    - !Equals [!Ref BastionAssociateEip, 'true']
+  AlbInternalCondition: !Equals [!Ref AlbInternal, 'true']
+  EksPrivateEndpointEnabled: !Equals [!Ref EksEndpointPrivateAccess, 'true']
+  EksPublicEndpointEnabled: !Equals [!Ref EksEndpointPublicAccess, 'true']
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-vpc'
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-igw'
+  VpcGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PublicSubnet1Cidr
+      AvailabilityZone: !If [UseDefaultAz1, !Select [0, !GetAZs ''], !Ref AvailabilityZone1]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-public-1'
+        - Key: Tier
+          Value: public
+        - Key: kubernetes.io/role/elb
+          Value: '1'
+        - Key: !Sub 'kubernetes.io/cluster/${EksClusterName}'
+          Value: shared
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PublicSubnet2Cidr
+      AvailabilityZone: !If [UseDefaultAz2, !Select [1, !GetAZs ''], !Ref AvailabilityZone2]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-public-2'
+        - Key: Tier
+          Value: public
+        - Key: kubernetes.io/role/elb
+          Value: '1'
+        - Key: !Sub 'kubernetes.io/cluster/${EksClusterName}'
+          Value: shared
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PrivateSubnet1Cidr
+      AvailabilityZone: !If [UseDefaultAz1, !Select [0, !GetAZs ''], !Ref AvailabilityZone1]
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-private-1'
+        - Key: Tier
+          Value: private
+        - Key: kubernetes.io/role/internal-elb
+          Value: '1'
+        - Key: !Sub 'kubernetes.io/cluster/${EksClusterName}'
+          Value: shared
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref PrivateSubnet2Cidr
+      AvailabilityZone: !If [UseDefaultAz2, !Select [1, !GetAZs ''], !Ref AvailabilityZone2]
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-private-2'
+        - Key: Tier
+          Value: private
+        - Key: kubernetes.io/role/internal-elb
+          Value: '1'
+        - Key: !Sub 'kubernetes.io/cluster/${EksClusterName}'
+          Value: shared
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-public-rt'
+  PublicInternetRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  PublicSubnet1RouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+  PublicSubnet2RouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  NatEip1:
+    Type: AWS::EC2::EIP
+    Condition: NatEnabled
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-nat-eip-1'
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    Condition: NatEnabled
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      AllocationId: !GetAtt NatEip1.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-nat-1'
+  NatEip2:
+    Type: AWS::EC2::EIP
+    Condition: NatPerAz
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-nat-eip-2'
+  NatGateway2:
+    Type: AWS::EC2::NatGateway
+    Condition: NatPerAz
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      AllocationId: !GetAtt NatEip2.AllocationId
+      SubnetId: !Ref PublicSubnet2
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-nat-2'
+  PrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Condition: NatEnabled
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-private-rt-1'
+  PrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Condition: NatPerAz
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-private-rt-2'
+  PrivateNatRoute1:
+    Type: AWS::EC2::Route
+    Condition: NatEnabled
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway1
+  PrivateNatRoute2:
+    Type: AWS::EC2::Route
+    Condition: NatPerAz
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway2
+  PrivateSubnet1RouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !If [NatEnabled, !Ref PrivateRouteTable1, !Ref PublicRouteTable]
+  PrivateSubnet2RouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !If [NatPerAz, !Ref PrivateRouteTable2, !If [NatEnabled, !Ref PrivateRouteTable1, !Ref PublicRouteTable]]
+
+  BastionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: CreateBastion
+    Properties:
+      GroupDescription: Bastion host in a public subnet
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref BastionSshCidr
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-bastion'
+  BastionInstance:
+    Type: AWS::EC2::Instance
+    Condition: CreateBastion
+    Properties:
+      ImageId: !Ref BastionAmiSsmParameter
+      InstanceType: !Ref BastionInstanceType
+      KeyName: !Ref Ec2KeyName
+      SubnetId: !Ref PublicSubnet1
+      SecurityGroupIds:
+        - !Ref BastionSecurityGroup
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+        HttpPutResponseHopLimit: 2
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: !Ref BastionRootVolumeSize
+            VolumeType: !Ref BastionRootVolumeType
+            Encrypted: true
+            DeleteOnTermination: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-bastion'
+        - Key: Role
+          Value: bastion
+  BastionEip:
+    Type: AWS::EC2::EIP
+    Condition: CreateBastionEip
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-bastion-eip'
+  BastionEipAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Condition: CreateBastionEip
+    Properties:
+      InstanceId: !Ref BastionInstance
+      EIP: !Ref BastionEip
+
+  EksClusterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-eks-cluster'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: eks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/AmazonEKSClusterPolicy'
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/AmazonEKSVPCResourceController'
+  EksNodeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-eks-nodes'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/AmazonEKSWorkerNodePolicy'
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/AmazonEKS_CNI_Policy'
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly'
+
+  EksCluster:
+    Type: AWS::EKS::Cluster
+    DependsOn: [EksClusterRole]
+    Properties:
+      Name: !Ref EksClusterName
+      Version: !Ref EksClusterVersion
+      RoleArn: !GetAtt EksClusterRole.Arn
+      AccessConfig:
+        AuthenticationMode: API_AND_CONFIG_MAP
+        BootstrapClusterCreatorAdminPermissions: true
+      ResourcesVpcConfig:
+        SubnetIds: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+        EndpointPrivateAccess: !If [EksPrivateEndpointEnabled, true, false]
+        EndpointPublicAccess: !If [EksPublicEndpointEnabled, true, false]
+
+  EksNodesSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Additional security group for EKS worker nodes
+      VpcId: !Ref Vpc
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: !Ref EksNodesEgressCidr
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-eks-nodes'
+        - Key: !Sub 'kubernetes.io/cluster/${EksClusterName}'
+          Value: owned
+  EksNodesSelfIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref EksNodesSecurityGroup
+      IpProtocol: -1
+      SourceSecurityGroupId: !Ref EksNodesSecurityGroup
+      Description: Node to node
+  EksNodesSshIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: CreateBastion
+    Properties:
+      GroupId: !Ref EksNodesSecurityGroup
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+      SourceSecurityGroupId: !Ref BastionSecurityGroup
+      Description: SSH from bastion
+  EksNodesAlbIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref EksNodesSecurityGroup
+      IpProtocol: tcp
+      FromPort: !Ref AlbTargetPort
+      ToPort: !Ref AlbTargetPort
+      SourceSecurityGroupId: !Ref AlbSecurityGroup
+      Description: ALB to EKS node target port
+
+  EksNodeLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub '${ProjectName}-${Environment}-ng'
+      LaunchTemplateData:
+        KeyName: !Ref Ec2KeyName
+        SecurityGroupIds:
+          - !GetAtt EksCluster.ClusterSecurityGroupId
+          - !Ref EksNodesSecurityGroup
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              VolumeSize: !Ref EksNodeDiskSize
+              VolumeType: gp3
+              Encrypted: true
+              DeleteOnTermination: true
+        MetadataOptions:
+          HttpEndpoint: enabled
+          HttpTokens: required
+          HttpPutResponseHopLimit: 2
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub '${ProjectName}-${Environment}-eks-node'
+
+  EksNodeGroupAz1:
+    Type: AWS::EKS::Nodegroup
+    DependsOn: [EksNodesAlbIngress]
+    Properties:
+      ClusterName: !Ref EksCluster
+      NodegroupName: node-group-1
+      NodeRole: !GetAtt EksNodeRole.Arn
+      Subnets: [!Ref PrivateSubnet1]
+      InstanceTypes: [!Ref EksNodeInstanceType]
+      AmiType: !Ref EksNodeAmiType
+      CapacityType: !Ref EksNodeCapacityType
+      LaunchTemplate:
+        Id: !Ref EksNodeLaunchTemplate
+        Version: !GetAtt EksNodeLaunchTemplate.LatestVersionNumber
+      ScalingConfig:
+        DesiredSize: !Ref EksNodeDesiredSize
+        MinSize: !Ref EksNodeMinSize
+        MaxSize: !Ref EksNodeMaxSize
+      UpdateConfig:
+        MaxUnavailable: 1
+      Labels:
+        spendsmart.io/az: !If [UseDefaultAz1, !Select [0, !GetAZs ''], !Ref AvailabilityZone1]
+      Tags:
+        Name: !Sub '${ProjectName}-${Environment}-node-group-1'
+  EksNodeGroupAz2:
+    Type: AWS::EKS::Nodegroup
+    DependsOn: [EksNodesAlbIngress]
+    Properties:
+      ClusterName: !Ref EksCluster
+      NodegroupName: node-group-2
+      NodeRole: !GetAtt EksNodeRole.Arn
+      Subnets: [!Ref PrivateSubnet2]
+      InstanceTypes: [!Ref EksNodeInstanceType]
+      AmiType: !Ref EksNodeAmiType
+      CapacityType: !Ref EksNodeCapacityType
+      LaunchTemplate:
+        Id: !Ref EksNodeLaunchTemplate
+        Version: !GetAtt EksNodeLaunchTemplate.LatestVersionNumber
+      ScalingConfig:
+        DesiredSize: !Ref EksNodeDesiredSize
+        MinSize: !Ref EksNodeMinSize
+        MaxSize: !Ref EksNodeMaxSize
+      UpdateConfig:
+        MaxUnavailable: 1
+      Labels:
+        spendsmart.io/az: !If [UseDefaultAz2, !Select [1, !GetAZs ''], !Ref AvailabilityZone2]
+      Tags:
+        Name: !Sub '${ProjectName}-${Environment}-node-group-2'
+
+  EksAddonVpcCni:
+    Type: AWS::EKS::Addon
+    DependsOn: [EksNodeGroupAz1, EksNodeGroupAz2]
+    Properties:
+      ClusterName: !Ref EksCluster
+      AddonName: vpc-cni
+      ResolveConflicts: OVERWRITE
+  EksAddonKubeProxy:
+    Type: AWS::EKS::Addon
+    DependsOn: [EksNodeGroupAz1, EksNodeGroupAz2]
+    Properties:
+      ClusterName: !Ref EksCluster
+      AddonName: kube-proxy
+      ResolveConflicts: OVERWRITE
+  EksAddonCoreDns:
+    Type: AWS::EKS::Addon
+    DependsOn: [EksNodeGroupAz1, EksNodeGroupAz2]
+    Properties:
+      ClusterName: !Ref EksCluster
+      AddonName: coredns
+      ResolveConflicts: OVERWRITE
+
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Application Load Balancer
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref AlbListenerPort
+          ToPort: !Ref AlbListenerPort
+          CidrIp: !Ref AlbIngressCidr
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-alb'
+  AlbToNodesEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref AlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: !Ref AlbTargetPort
+      ToPort: !Ref AlbTargetPort
+      DestinationSecurityGroupId: !Ref EksNodesSecurityGroup
+      Description: ALB to EKS nodes
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-alb'
+      Scheme: !If [AlbInternalCondition, internal, internet-facing]
+      Type: application
+      SecurityGroups: [!Ref AlbSecurityGroup]
+      Subnets: [!Ref PublicSubnet1, !Ref PublicSubnet2]
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-alb'
+  AlbTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-eks'
+      Port: !Ref AlbTargetPort
+      Protocol: HTTP
+      TargetType: instance
+      VpcId: !Ref Vpc
+      HealthCheckEnabled: true
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: !Ref AlbHealthCheckPath
+      Matcher:
+        HttpCode: '200-399'
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-eks-tg'
+  AlbListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: !Ref AlbListenerPort
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref AlbTargetGroup
+
+  DataBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Ref S3BucketName
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-athena-results
+            Status: Enabled
+            Prefix: !Sub '${AthenaResultsPrefix}/'
+            ExpirationInDays: !Ref AthenaResultsExpirationDays
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  GlueDatabase:
+    Type: AWS::Glue::Database
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Name: !Ref GlueDatabaseName
+        Description: SpendSmart analytics catalog
+  GlueRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-glue'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: glue.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub 'arn:${AWS::Partition}:iam::aws:policy/service-role/AWSGlueServiceRole'
+      Policies:
+        - PolicyName: !Sub '${ProjectName}-${Environment}-glue-s3'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
+                Resource: !Sub '${DataBucket.Arn}/${DataPrefix}/*'
+              - Effect: Allow
+                Action: [s3:ListBucket]
+                Resource: !GetAtt DataBucket.Arn
+
+  AthenaWorkgroup:
+    Type: AWS::Athena::WorkGroup
+    Properties:
+      Name: !Ref AthenaWorkgroupName
+      State: ENABLED
+      WorkGroupConfiguration:
+        EnforceWorkGroupConfiguration: true
+        PublishCloudWatchMetricsEnabled: false
+        BytesScannedCutoffPerQuery: !Ref AthenaBytesScannedCutoff
+        ResultConfiguration:
+          OutputLocation: !Sub 's3://${DataBucket}/${AthenaResultsPrefix}/'
+          EncryptionConfiguration:
+            EncryptionOption: SSE_S3
+
+  AnalyticsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-analytics-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowTrustedPrincipal
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action: sts:AssumeRole
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-${Environment}-analytics-role'
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+  AnalyticsPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub '${ProjectName}-${Environment}-analytics-policy'
+      Description: Analytics, cost, AWS infrastructure and service metadata access
+      Roles: [!Ref AnalyticsRole]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: STSValidation
+            Effect: Allow
+            Action: [sts:GetCallerIdentity, sts:AssumeRole]
+            Resource: '*'
+          - Sid: AthenaGlueAndCUR
+            Effect: Allow
+            Action:
+              - athena:StartQueryExecution
+              - athena:GetQueryExecution
+              - athena:GetQueryResults
+              - athena:GetQueryResultsStream
+              - athena:ListDatabases
+              - athena:ListTableMetadata
+              - athena:GetWorkGroup
+              - athena:ListWorkGroups
+              - glue:GetTable
+              - glue:GetTables
+              - glue:GetDatabase
+              - glue:GetDatabases
+              - glue:GetPartition
+              - glue:GetPartitions
+              - glue:BatchGetPartition
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:PutObject
+              - s3:GetBucketLocation
+            Resource: '*'
+          - Sid: CostExplorer
+            Effect: Allow
+            Action: [ce:GetCostAndUsage, ce:GetCostForecast, ce:GetDimensionValues, ce:GetTags]
+            Resource: '*'
+          - Sid: S3Metadata
+            Effect: Allow
+            Action:
+              - s3:ListAllMyBuckets
+              - s3:GetBucketLocation
+              - s3:ListBucket
+              - s3:GetEncryptionConfiguration
+              - s3:GetBucketTagging
+              - s3:GetBucketVersioning
+              - s3:GetBucketLifecycleConfiguration
+              - s3:GetPublicAccessBlock
+            Resource: '*'
+          - Sid: EC2AndNetworkMetadata
+            Effect: Allow
+            Action:
+              - ec2:DescribeInstances
+              - ec2:DescribeVolumes
+              - ec2:DescribeSnapshots
+              - ec2:DescribeInstanceTypes
+              - ec2:DescribeTags
+              - ec2:DescribeVpcs
+              - ec2:DescribeSubnets
+              - ec2:DescribeInternetGateways
+              - ec2:DescribeNatGateways
+              - ec2:DescribeRouteTables
+              - ec2:DescribeNetworkInterfaces
+              - ec2:DescribeVpcEndpoints
+              - ec2:DescribeAddresses
+              - ec2:DescribeFlowLogs
+              - ec2:DescribeRegions
+              - ec2:DescribeImages
+              - cloudwatch:GetMetricData
+            Resource: '*'
+          - Sid: ELBMetadata
+            Effect: Allow
+            Action:
+              - elasticloadbalancing:DescribeLoadBalancers
+              - elasticloadbalancing:DescribeLoadBalancerAttributes
+              - elasticloadbalancing:DescribeTargetGroups
+              - elasticloadbalancing:DescribeTargetGroupAttributes
+              - elasticloadbalancing:DescribeTargetHealth
+              - elasticloadbalancing:DescribeListeners
+              - elasticloadbalancing:DescribeRules
+              - elasticloadbalancing:DescribeTags
+              - elasticloadbalancing:DescribeInstanceHealth
+            Resource: '*'
+          - Sid: WAFMetadata
+            Effect: Allow
+            Action: [wafv2:GetWebACLForResource, wafv2:ListWebACLs]
+            Resource: '*'
+          - Sid: RDSMetadata
+            Effect: Allow
+            Action:
+              - rds:DescribeDBInstances
+              - rds:DescribeDBClusters
+              - rds:DescribeDBSnapshots
+              - rds:ListTagsForResource
+              - rds:DescribeDBSubnetGroups
+            Resource: '*'
+          - Sid: ECSMetadata
+            Effect: Allow
+            Action: [ecs:ListClusters, ecs:DescribeClusters, ecs:ListTasks, ecs:DescribeTasks, ecs:ListServices, ecs:DescribeServices]
+            Resource: '*'
+          - Sid: ECRMetadata
+            Effect: Allow
+            Action: [ecr:DescribeRepositories, ecr:DescribeImages, ecr:GetLifecyclePolicy]
+            Resource: '*'
+          - Sid: EKSMetadata
+            Effect: Allow
+            Action:
+              - eks:ListClusters
+              - eks:DescribeCluster
+              - eks:ListNodegroups
+              - eks:DescribeNodegroup
+              - eks:ListAddons
+              - eks:DescribeAddon
+              - eks:ListFargateProfiles
+              - eks:DescribeFargateProfile
+            Resource: '*'
+
+Outputs:
+  VpcId:
+    Value: !Ref Vpc
+  PublicSubnetIds:
+    Value: !Join [',', [!Ref PublicSubnet1, !Ref PublicSubnet2]]
+  PrivateSubnetIds:
+    Value: !Join [',', [!Ref PrivateSubnet1, !Ref PrivateSubnet2]]
+  BastionInstanceId:
+    Condition: CreateBastion
+    Value: !Ref BastionInstance
+  BastionPublicIp:
+    Condition: CreateBastion
+    Value: !If [CreateBastionEip, !Ref BastionEip, !GetAtt BastionInstance.PublicIp]
+  EksClusterName:
+    Value: !Ref EksCluster
+  EksClusterEndpoint:
+    Value: !GetAtt EksCluster.Endpoint
+  EksNodeSecurityGroupId:
+    Value: !Ref EksNodesSecurityGroup
+  EksNodeGroupNames:
+    Value: !Join [',', [!Ref EksNodeGroupAz1, !Ref EksNodeGroupAz2]]
+  AlbDnsName:
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
+  AlbTargetGroupArn:
+    Value: !Ref AlbTargetGroup
+  S3BucketName:
+    Value: !Ref DataBucket
+  S3DataLocation:
+    Value: !Sub 's3://${DataBucket}/${DataPrefix}/'
+  AthenaOutputLocation:
+    Value: !Sub 's3://${DataBucket}/${AthenaResultsPrefix}/'
+  GlueDatabaseName:
+    Value: !Ref GlueDatabase
+  GlueRoleArn:
+    Value: !GetAtt GlueRole.Arn
+  AthenaWorkgroupName:
+    Value: !Ref AthenaWorkgroup
+  AnalyticsRoleArn:
+    Value: !GetAtt AnalyticsRole.Arn
+  ConfigureKubectl:
+    Value: !Sub 'aws eks update-kubeconfig --region ${AWS::Region} --name ${EksCluster}'
