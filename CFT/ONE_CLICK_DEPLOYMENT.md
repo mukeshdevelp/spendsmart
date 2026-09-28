@@ -37,10 +37,142 @@ The template defaults to a private-only EKS API endpoint. Your computer must hav
 6. Continue through **Configure stack options**. Add tags or notifications if needed.
 7. On **Review**, acknowledge that CloudFormation may create IAM resources by selecting the acknowledgement for custom names, then choose **Submit**.
 8. On the stack page, wait for `CREATE_COMPLETE`. For errors, open **Events** and start with the first `CREATE_FAILED` entry, not only the final rollback message.
-9. Open **Outputs** and save the cluster name, `ConfigureKubectl` command, ALB DNS name, bucket name, Glue database, and analytics role ARN.
+9. Open **Outputs** and save the cluster name, `EksConfigureKubectl` command, ALB DNS name, bucket name, Glue database, and analytics role ARN.
 
 The Console uses the local template directly. No template S3 bucket is required for this template size.
 
+## Folder Structure
+my-platform/
+│
+├── README.md
+├── Makefile
+├── .gitignore
+│
+├── cloudformation/
+│   │
+│   ├── modules/
+│   │   │
+│   │   ├── network/
+│   │   │   ├── vpc.yaml
+│   │   │   ├── subnets.yaml
+│   │   │   ├── routes.yaml
+│   │   │   ├── nat.yaml
+│   │   │   └── outputs.yaml
+│   │   │
+│   │   ├── security/
+│   │   │   ├── security-groups.yaml
+│   │   │   └── nacl.yaml
+│   │   │
+│   │   ├── iam/
+│   │   │   ├── roles.yaml
+│   │   │   ├── policies.yaml
+│   │   │   └── instance-profiles.yaml
+│   │   │
+│   │   ├── compute/
+│   │   │   ├── launch-template.yaml
+│   │   │   ├── autoscaling.yaml
+│   │   │   └── ec2.yaml
+│   │   │
+│   │   ├── load-balancer/
+│   │   │   ├── alb.yaml
+│   │   │   ├── target-groups.yaml
+│   │   │   └── listeners.yaml
+│   │   │
+│   │   ├── database/
+│   │   │   ├── rds.yaml
+│   │   │   ├── subnet-group.yaml
+│   │   │   └── parameter-group.yaml
+│   │   │
+│   │   ├── cache/
+│   │   │   └── redis.yaml
+│   │   │
+│   │   ├── storage/
+│   │   │   ├── s3.yaml
+│   │   │   └── ebs.yaml
+│   │   │
+│   │   ├── container/
+│   │   │   └── ecr.yaml
+│   │   │
+│   │   ├── monitoring/
+│   │   │   ├── cloudwatch.yaml
+│   │   │   ├── alarms.yaml
+│   │   │   └── dashboards.yaml
+│   │   │
+│   │   └── dns/
+│   │       └── route53.yaml
+│   │
+│   ├── stacks/
+│   │   │
+│   │   ├── network.yaml
+│   │   ├── security.yaml
+│   │   ├── iam.yaml
+│   │   ├── compute.yaml
+│   │   ├── alb.yaml
+│   │   ├── database.yaml
+│   │   ├── cache.yaml
+│   │   ├── storage.yaml
+│   │   └── monitoring.yaml
+│   │
+│   └── policies/
+│       ├── cfn-policy.yaml
+│       └── resource-policy.yaml
+│
+├── environments/
+│   │
+│   ├── dev/
+│   │   ├── parameters.json
+│   │   └── config.yaml
+│   │
+│   ├── staging/
+│   │   ├── parameters.json
+│   │   └── config.yaml
+│   │
+│   └── prod/
+│       ├── parameters.json
+│       └── config.yaml
+│
+├── scripts/
+│   ├── validate.sh
+│   ├── lint.sh
+│   ├── deploy.sh
+│   ├── delete.sh
+│   └── package.sh
+│
+├── helm/
+│   │
+│   └── application/
+│       ├── Chart.yaml
+│       ├── values.yaml
+│       ├── values-dev.yaml
+│       ├── values-staging.yaml
+│       ├── values-prod.yaml
+│       └── templates/
+│           ├── deployment.yaml
+│           ├── service.yaml
+│           ├── ingress.yaml
+│           ├── configmap.yaml
+│           ├── secret.yaml
+│           ├── hpa.yaml
+│           └── serviceaccount.yaml
+│
+├── application/
+│   ├── Dockerfile
+│   ├── src/
+│   └── tests/
+│
+├── ci-cd/
+│   ├── Jenkinsfile
+│   └── pipelines/
+│       ├── infrastructure.groovy
+│       ├── application.groovy
+│       └── security.groovy
+│
+└── docs/
+    ├── architecture.md
+    ├── networking.md
+    ├── security.md
+    ├── deployment.md
+    └── disaster-recovery.md
 ## CLI: Single-Command Deployment
 
 Install AWS CLI v2, set credentials for the intended account, and edit `parameters.json` as described above. From a terminal, run this command from the `CFT` folder; replace the region if needed:
@@ -78,7 +210,7 @@ aws cloudformation describe-stack-events \
 
 ## Install the Application with Helm
 
-Infrastructure creation does not install the SpendSmart application. Configure network access to the private EKS endpoint, then use the `ConfigureKubectl` stack output:
+Infrastructure creation does not install the SpendSmart application. Configure network access to the private EKS endpoint, then use the `EksConfigureKubectl` stack output:
 
 ```sh
 aws eks update-kubeconfig --region us-east-1 --name spendsmart

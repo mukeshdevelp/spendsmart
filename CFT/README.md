@@ -12,6 +12,47 @@ For the guided Console deployment, single-command CLI deployment, and troublesho
 - An internet-facing Application Load Balancer, listener, target group, and security groups.
 - An encrypted and versioned S3 bucket, Glue database and role, Athena workgroup, and analytics IAM role and policy.
 
+## Terraform Output Compatibility
+
+The template exposes all 30 Terraform outputs. CloudFormation output keys must be alphanumeric, so the output identifiers use PascalCase; the mapping below records the corresponding Terraform names. CloudFormation output values are strings, so AZ-keyed subnet/NAT maps and the node-group list are JSON-encoded strings.
+
+| CloudFormation output | Terraform output |
+| --- | --- |
+| `VpcId` | `vpc_id` |
+| `VpcCidr` | `vpc_cidr` |
+| `PublicSubnetIds` | `public_subnet_ids` |
+| `PrivateSubnetIds` | `private_subnet_ids` |
+| `NatGatewayIds` | `nat_gateway_ids` |
+| `InternetGatewayId` | `internet_gateway_id` |
+| `BastionInstanceId` | `bastion_instance_id` |
+| `BastionSecurityGroupId` | `bastion_security_group_id` |
+| `SshKeyPairName` | `ssh_key_pair_name` |
+| `BastionPublicIp` | `bastion_public_ip` |
+| `EksClusterName` | `eks_cluster_name` |
+| `EksClusterEndpoint` | `eks_cluster_endpoint` |
+| `EksClusterArn` | `eks_cluster_arn` |
+| `EksClusterSecurityGroupId` | `eks_cluster_security_group_id` |
+| `EksNodesSecurityGroupId` | `eks_nodes_security_group_id` |
+| `EksNodeGroupNames` | `eks_node_group_names` |
+| `EksConfigureKubectl` | `eks_configure_kubectl` |
+| `AlbDnsName` | `alb_dns_name` |
+| `AlbArn` | `alb_arn` |
+| `AlbTargetGroupArn` | `alb_target_group_arn` |
+| `BucketName` | `bucket_name` |
+| `DataLocation` | `data_location` |
+| `AthenaOutputLocation` | `athena_output_location` |
+| `GlueDatabaseName` | `glue_database_name` |
+| `GlueRoleArn` | `glue_role_arn` |
+| `AthenaWorkgroupName` | `athena_workgroup_name` |
+| `AnalyticsIamRoleName` | `analytics_iam_role_name` |
+| `AnalyticsIamRoleArn` | `analytics_iam_role_arn` |
+| `AnalyticsIamPolicyName` | `analytics_iam_policy_name` |
+| `AnalyticsIamPolicyArn` | `analytics_iam_policy_arn` |
+
+## Parameters
+
+All infrastructure input/configuration values are exposed as CloudFormation parameters with defaults matching the Terraform configuration. `parameters.json` contains example account-specific overrides. CloudFormation resource types, standard AWS tag keys, the Kubernetes AZ-label key, and the IAM policy statements remain fixed because they define the resource schema or the intended security behavior rather than deployment-specific inputs.
+
 ## Before deployment
 
 1. Use AWS CLI v2 with credentials authorized to create VPC, EC2, EKS, IAM, ELB, S3, Glue, and Athena resources. The stack creates named IAM resources, so deployment requires `CAPABILITY_NAMED_IAM`.
@@ -65,7 +106,7 @@ aws cloudformation describe-stacks \
 
 ## Deploy workloads with Helm
 
-CloudFormation provisions the EKS cluster and its node groups; install the application charts afterward from a machine that can reach the cluster's private API endpoint. First configure `kubectl` using the `ConfigureKubectl` stack output, then verify access:
+CloudFormation provisions the EKS cluster and its node groups; install the application charts afterward from a machine that can reach the cluster's private API endpoint. First configure `kubectl` using the `EksConfigureKubectl` stack output, then verify access:
 
 ```sh
 aws eks update-kubeconfig --region us-east-1 --name spendsmart
