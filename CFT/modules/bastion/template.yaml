@@ -38,6 +38,7 @@ Parameters:
   Ec2KeyName:
     Type: AWS::EC2::KeyPair::KeyName
     Description: Existing EC2 key pair in the deployment region.
+    
 
   BastionSshCidr:
     Type: String

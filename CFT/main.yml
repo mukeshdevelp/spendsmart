@@ -64,7 +64,7 @@ Parameters:
     Default: t3.micro
 
   BastionAmiSsmParameter:
-    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Type: String
     Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
 
   BastionRootVolumeSize:
@@ -82,7 +82,7 @@ Parameters:
   Ec2KeyName:
     Type: AWS::EC2::KeyPair::KeyName
     Description: Existing EC2 key pair in the deployment region.
-
+    
   BastionSshCidr:
     Type: String
     Default: 0.0.0.0/0
@@ -112,11 +112,11 @@ Parameters:
 
   EksNodeDesiredSize:
     Type: Number
-    Default: 1
+    Default: 2
 
   EksNodeMinSize:
     Type: Number
-    Default: 1
+    Default: 2
 
   EksNodeMaxSize:
     Type: Number
@@ -544,13 +544,7 @@ Parameters:
     Type: Number
     Default: 30080
     Description: Container port the pods listen on.
-  EksNodeDesiredSize:
-    Type: Number
-    Default: 2
-
-  EksNodeMinSize:
-    Type: Number
-    Default: 2
+  
   AlbHealthCheckPath:
     Type: String
     Default: /healthz

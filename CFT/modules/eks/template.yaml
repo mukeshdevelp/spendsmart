@@ -54,7 +54,8 @@ Parameters:
 
   EksNodeMinSize:
     Type: Number
-    Default: 2
+    Default: 1
+
   EksNodeMaxSize:
     Type: Number
     Default: 2
@@ -386,56 +387,18 @@ Resources:
 
   EksNodeGroupAz1:
     Type: AWS::EKS::Nodegroup
-
-    Properties:
-      ClusterName: !Ref EksCluster
-      NodegroupName: !Sub '${EksNodeGroupNamePrefix}1'
-      NodeRole: !GetAtt EksNodeRole.Arn
-
-      Subnets:
-        - !Ref PrivateSubnet1Id
-
-      InstanceTypes:
-        - !Ref EksNodeInstanceType
-
-      AmiType: !Ref EksNodeAmiType
-      CapacityType: !Ref EksNodeCapacityType
-
-      LaunchTemplate:
-        Id: !Ref EksNodeLaunchTemplate
-        Version: !GetAtt EksNodeLaunchTemplate.LatestVersionNumber
-
-      ScalingConfig:
-        DesiredSize: !Ref EksNodeDesiredSize
-        MinSize: !Ref EksNodeMinSize
-        MaxSize: !Ref EksNodeMaxSize
-
-      UpdateConfig:
-        MaxUnavailable: !Ref EksNodeUpdateMaxUnavailable
-
-      Labels:
-        spendsmart.io/az: !If
-          - UseDefaultAz1
-          - !Select [0, !GetAZs '']
-          - !Ref AvailabilityZone1
-
-      Tags:
-        Name: !Sub '${NamePrefix}${EksNodeGroupTagNameSuffix}1'
-
     DependsOn:
       - EksAddonVpcCni
       - EksAddonKubeProxy
       - EksAddonCoreDns
-
-    
-  EksNodeGroupAz2:
-    Type: AWS::EKS::Nodegroup
     Properties:
       ClusterName: !Ref EksCluster
-      NodegroupName: !Sub '${EksNodeGroupNamePrefix}2'
+      NodegroupName: !Sub '${EksNodeGroupNamePrefix}1'
       NodeRole: !GetAtt EksNodeRole.Arn
-      Subnets: [!Ref PrivateSubnet2Id]
-      InstanceTypes: [!Ref EksNodeInstanceType]
+      Subnets:
+        - !Ref PrivateSubnet1Id
+      InstanceTypes:
+        - !Ref EksNodeInstanceType
       AmiType: !Ref EksNodeAmiType
       CapacityType: !Ref EksNodeCapacityType
       LaunchTemplate:
@@ -448,9 +411,42 @@ Resources:
       UpdateConfig:
         MaxUnavailable: !Ref EksNodeUpdateMaxUnavailable
       Labels:
-        spendsmart.io/az: !If [UseDefaultAz2, !Select [1, !GetAZs ''], !Ref AvailabilityZone2]
+        spendsmart.io/az: az1
+      Tags:
+        Name: !Sub '${NamePrefix}${EksNodeGroupTagNameSuffix}1'
+      
+
+
+  EksNodeGroupAz2:
+    Type: AWS::EKS::Nodegroup
+    DependsOn:
+      - EksAddonVpcCni
+      - EksAddonKubeProxy
+      - EksAddonCoreDns
+    Properties:
+      ClusterName: !Ref EksCluster
+      NodegroupName: !Sub '${EksNodeGroupNamePrefix}2'
+      NodeRole: !GetAtt EksNodeRole.Arn
+      Subnets:
+        - !Ref PrivateSubnet2Id
+      InstanceTypes:
+        - !Ref EksNodeInstanceType
+      AmiType: !Ref EksNodeAmiType
+      CapacityType: !Ref EksNodeCapacityType
+      LaunchTemplate:
+        Id: !Ref EksNodeLaunchTemplate
+        Version: !GetAtt EksNodeLaunchTemplate.LatestVersionNumber
+      ScalingConfig:
+        DesiredSize: !Ref EksNodeDesiredSize
+        MinSize: !Ref EksNodeMinSize
+        MaxSize: !Ref EksNodeMaxSize
+      UpdateConfig:
+        MaxUnavailable: !Ref EksNodeUpdateMaxUnavailable
+      Labels:
+        spendsmart.io/az: az2
       Tags:
         Name: !Sub '${NamePrefix}${EksNodeGroupTagNameSuffix}2'
+    
 
   EksAddonVpcCni:
     Type: AWS::EKS::Addon
