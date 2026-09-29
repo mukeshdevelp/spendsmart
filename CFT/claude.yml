@@ -1,437 +1,244 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
-  SpendSmart network, bastion, EKS, ALB, S3, Glue, Athena, and analytics IAM
-  infrastructure translated from the Terraform configuration.
+  SpendSmart network, bastion, EKS (self-managed workers), ALB, S3, Glue,
+  Athena, and analytics IAM infrastructure translated from the Terraform
+  configuration.
 
-# Parameters sections
+
+# PARAMETERS
+
 Parameters:
 
+  #  General
   ProjectName:
     Type: String
     Default: spendsmart
-
   NamePrefix:
     Type: String
     Default: spendsmart-dev
-
   Environment:
     Type: String
     Default: dev
-
-  VpcCidr:
+  ManagedByTag:
     Type: String
-    Default: 10.0.0.0/16
-
-  PublicSubnet1Cidr:
-    Type: String
-    Default: 10.0.0.0/24
-
-  PublicSubnet2Cidr:
-    Type: String
-    Default: 10.0.1.0/24
-
-  PrivateSubnet1Cidr:
-    Type: String
-    Default: 10.0.2.0/24
-
-  PrivateSubnet2Cidr:
-    Type: String
-    Default: 10.0.3.0/24
-
-  AvailabilityZone1:
-    Type: String
-    Default: ''
-    Description: Optional AZ override. Empty selects the first available AZ.
-
-  AvailabilityZone2:
-    Type: String
-    Default: ''
-    Description: Optional AZ override. Empty selects the second available AZ.
-
-  EnableNatGateway:
-    Type: String
-    AllowedValues: ['true', 'false']
-    Default: 'true'
-    
-  BastionEnabled:
-    Type: String
-    AllowedValues: ['true', 'false']
-    Default: 'true'
-
-  BastionAssociateEip:
-    Type: String
-    AllowedValues: ['true', 'false']
-    Default: 'true'
-
-  BastionInstanceType:
-    Type: String
-    Default: t3.micro
-
-  BastionAmiSsmParameter:
-    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
-
-  BastionRootVolumeSize:
-    Type: Number
-    Default: 8
-    
-  BastionRootVolumeType:
-    Type: String
-    Default: gp3
-
-  BastionRootDeviceName:
-    Type: String
-    Default: /dev/xvda
-
+    Default: CFT
   Ec2KeyName:
     Type: AWS::EC2::KeyPair::KeyName
     Description: Existing EC2 key pair in the deployment region.
 
-  BastionSshCidr:
+  #  Network
+  VpcCidr:
     Type: String
-    Default: 0.0.0.0/0
-    Description: Restrict this to your trusted public IP/CIDR before deployment.
-
-  EksClusterName:
+    Default: 10.0.0.0/16
+  PublicSubnet1Cidr:
     Type: String
-    Default: spendsmart
-
-  EksClusterVersion:
+    Default: 10.0.0.0/24
+  PublicSubnet2Cidr:
     Type: String
-    Default: '1.36'
-
-  EksEndpointPrivateAccess:
+    Default: 10.0.1.0/24
+  PrivateSubnet1Cidr:
     Type: String
-    AllowedValues: ['true', 'false']
-    Default: 'true'
-
-  EksEndpointPublicAccess:
+    Default: 10.0.2.0/24
+  PrivateSubnet2Cidr:
     Type: String
-    AllowedValues: ['true', 'false']
-    Default: 'false'
-
-  EksNodeInstanceType:
+    Default: 10.0.3.0/24
+  AvailabilityZone1:
     Type: String
-    Default: c7i-flex.large
-
-  EksNodeDesiredSize:
-    Type: Number
-    Default: 1
-
-  EksNodeMinSize:
-    Type: Number
-    Default: 1
-
-  EksNodeMaxSize:
-    Type: Number
-    Default: 3
-
-  EksNodeDiskSize:
-    Type: Number
-    Default: 48
-
-  EksNodeAmiType:
+    Default: ''
+    Description: Optional AZ override. Empty selects the first available AZ.
+  AvailabilityZone2:
     Type: String
-    Default: AL2023_x86_64_STANDARD
-
-  EksNodeCapacityType:
-    Type: String
-    AllowedValues: [ON_DEMAND]
-    Default: ON_DEMAND
-
-  EksNodesEgressCidr:
-    Type: String
-    Default: 0.0.0.0/0
-    Description: Allows node bootstrap and the Load Balancer Controller to reach AWS APIs through NAT; narrow with VPC endpoints if desired.
-
-  S3BucketName:
-    Type: String
-    Default: athena-results-spendsmart-dev
-    Description: Must be globally unique. Change if this bucket name is already taken.
-
-  DataPrefix:
-    Type: String
-    Default: data
-
-  AthenaResultsPrefix:
-    Type: String
-    Default: athena-results
-
-  AthenaResultsExpirationDays:
-    Type: Number
-    Default: 30
-
-  GlueDatabaseName:
-    Type: String
-    Default: spendsmart_analytics
-  AthenaWorkgroupName:
-    Type: String
-    Default: spendsmart
-
-  AthenaBytesScannedCutoff:
-    Type: Number
-    Default: 10737418240
-
-  AthenaWorkgroupState:
-    Type: String
-    AllowedValues: [ENABLED, DISABLED]
-    Default: ENABLED
-
-  AthenaEnforceWorkgroupConfiguration:
+    Default: ''
+    Description: Optional AZ override. Empty selects the second available AZ.
+  EnableNatGateway:
     Type: String
     AllowedValues: ['true', 'false']
     Default: 'true'
-
-  AthenaPublishCloudWatchMetrics:
-    Type: String
-    AllowedValues: ['true', 'false']
-    Default: 'false'
-
-  AthenaResultEncryptionOption:
-    Type: String
-    AllowedValues: [SSE_S3, SSE_KMS, CSE_KMS]
-    Default: SSE_S3
-
-  AthenaLifecycleEnabled:
-    Type: String
-    AllowedValues: ['true', 'false']
-    Default: 'true'
-
-  AthenaLifecycleStatus:
-    Type: String
-    AllowedValues: [Enabled, Disabled]
-    Default: Enabled
-
-  GlueRoleAssumeService:
-    Type: String
-    Default: glue.amazonaws.com
-
-  GlueServiceRolePolicyArn:
-    Type: String
-    Default: arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
-
   EnableDnsHostnames:
     Type: String
     AllowedValues: ['true', 'false']
     Default: 'true'
-
   EnableDnsSupport:
     Type: String
     AllowedValues: ['true', 'false']
     Default: 'true'
-
   InternetRouteCidr:
     Type: String
     Default: 0.0.0.0/0
-
   TcpProtocol:
     Type: String
     Default: tcp
   AllTrafficProtocol:
     Type: String
     Default: '-1'
-
-  ManagedByTag:
-    Type: String
-    Default: CFT
-
   VpcNameSuffix:
     Type: String
     Default: -vpc
-
   InternetGatewayNameSuffix:
     Type: String
     Default: -igw
-
   PublicSubnetNameSuffix:
     Type: String
     Default: -public-
-
   PrivateSubnetNameSuffix:
     Type: String
     Default: -private-
-
   PublicRouteTableNameSuffix:
     Type: String
     Default: -public-rt
-
   PrivateRouteTableNameSuffix:
     Type: String
     Default: -private-rt-
-
   NatEipNameSuffix:
     Type: String
     Default: -nat-eip-
-
   NatGatewayNameSuffix:
     Type: String
     Default: -nat-
-
-  BastionNameSuffix:
-    Type: String
-    Default: -bastion
-
-  BastionEipNameSuffix:
-    Type: String
-    Default: -bastion-eip
-
-  EksAddonResolveConflicts:
-    Type: String
-    AllowedValues: [NONE, OVERWRITE, PRESERVE]
-    Default: OVERWRITE
-
   PublicSubnetTierTag:
     Type: String
     Default: public
-
   PrivateSubnetTierTag:
     Type: String
     Default: private
-
   AlbSubnetRoleTag:
     Type: String
     Default: '1'
-
   ClusterSubnetTagValue:
     Type: String
     Default: shared
 
-  BastionSshPort:
+  #  Bastion
+  BastionEnabled:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+  BastionAssociateEip:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+  BastionInstanceType:
+    Type: String
+    Default: t3.micro
+  BastionAmiSsmParameter:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+  BastionRootVolumeSize:
     Type: Number
-    Default: 22
-
-  BastionEgressCidr:
+    Default: 8
+  BastionRootVolumeType:
     Type: String
-    Default: 0.0.0.0/0
-
-  BastionSecurityGroupDescription:
+    Default: gp3
+  BastionRootDeviceName:
     Type: String
-    Default: Bastion host in a public subnet
-
-  BastionEgressDescription:
-    Type: String
-    Default: Bastion egress
-
-  BastionRoleTag:
-    Type: String
-    Default: bastion
-
-  BastionMetadataEndpoint:
-    Type: String
-    AllowedValues: [enabled, disabled]
-    Default: enabled
-
-  BastionMetadataTokens:
-    Type: String
-    AllowedValues: [required, optional]
-    Default: required
-
-  BastionMetadataHopLimit:
-    Type: Number
-    Default: 2
-
+    Default: /dev/xvda
   BastionRootVolumeEncrypted:
     Type: String
     AllowedValues: ['true', 'false']
     Default: 'true'
-
   BastionRootVolumeDeleteOnTermination:
     Type: String
     AllowedValues: ['true', 'false']
     Default: 'true'
+  BastionSshCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: Restrict this to your trusted public IP/CIDR before deployment.
+  BastionSshPort:
+    Type: Number
+    Default: 22
+  BastionEgressCidr:
+    Type: String
+    Default: 0.0.0.0/0
+  BastionSecurityGroupDescription:
+    Type: String
+    Default: Bastion host in a public subnet
+  BastionSshIngressDescription:
+    Type: String
+    Default: SSH access to bastion
+  BastionEgressDescription:
+    Type: String
+    Default: Bastion egress
+  BastionRoleTag:
+    Type: String
+    Default: bastion
+  BastionMetadataEndpoint:
+    Type: String
+    AllowedValues: [enabled, disabled]
+    Default: enabled
+  BastionMetadataTokens:
+    Type: String
+    AllowedValues: [required, optional]
+    Default: required
+  BastionMetadataHopLimit:
+    Type: Number
+    Default: 2
+  BastionNameSuffix:
+    Type: String
+    Default: -bastion
+  BastionEipNameSuffix:
+    Type: String
+    Default: -bastion-eip
 
+  # ---- EKS
+  EksClusterName:
+    Type: String
+    Default: spendsmart
+  EksClusterVersion:
+    Type: String
+    Default: '1.36'
+    Description: Confirm this version is available in your region.
+  EksEndpointPrivateAccess:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+  EksEndpointPublicAccess:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'false'
   EksAuthenticationMode:
     Type: String
     AllowedValues: [API, API_AND_CONFIG_MAP, CONFIG_MAP]
     Default: API_AND_CONFIG_MAP
-
   EksBootstrapCreatorAdmin:
     Type: String
     AllowedValues: ['true', 'false']
     Default: 'true'
-
+  EksServiceCidr:
+    Type: String
+    Default: 172.20.0.0/16
+    Description: Cluster service CIDR (EKS default for a 10.x VPC).
   EksClusterRoleNameSuffix:
     Type: String
     Default: -eks-cluster
-
   EksNodeRoleNameSuffix:
     Type: String
     Default: -eks-nodes
-
   EksClusterRoleAssumeService:
     Type: String
     Default: eks.amazonaws.com
-
   EksNodeRoleAssumeService:
     Type: String
     Default: ec2.amazonaws.com
-
   EksClusterPolicyArn:
     Type: String
     Default: arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
-
   EksVpcResourceControllerPolicyArn:
     Type: String
     Default: arn:aws:iam::aws:policy/AmazonEKSVPCResourceController
-
   EksNodeWorkerPolicyArn:
     Type: String
     Default: arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
-
   EksNodeCniPolicyArn:
     Type: String
     Default: arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
-
   EksNodeEcrPolicyArn:
     Type: String
     Default: arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
-
-  EksNodeDiskType:
+  EksAddonResolveConflicts:
     Type: String
-    Default: gp3
-
-  EksNodeDeviceName:
-    Type: String
-    Default: /dev/xvda
-
-  EksNodeVolumeEncrypted:
-    Type: String
-    AllowedValues: ['true', 'false']
-    Default: 'true'
-
-  EksNodeVolumeDeleteOnTermination:
-    Type: String
-    AllowedValues: ['true', 'false']
-    Default: 'true'
-
-  EksNodeMetadataEndpoint:
-    Type: String
-    AllowedValues: [enabled, disabled]
-    Default: enabled
-
-  EksNodeMetadataTokens:
-    Type: String
-    AllowedValues: [required, optional]
-    Default: required
-    
-  EksNodeMetadataHopLimit:
-    Type: Number
-    Default: 2
-  EksNodeLaunchTemplateSuffix:
-    Type: String
-    Default: -ng
-  EksNodeInstanceNameSuffix:
-    Type: String
-    Default: -eks-node
-  EksNodeGroupNamePrefix:
-    Type: String
-    Default: node-group-
-  EksNodeGroupTagNameSuffix:
-    Type: String
-    Default: -node-group-
-  EksNodeUpdateMaxUnavailable:
-    Type: Number
-    Default: 1
+    AllowedValues: [NONE, OVERWRITE, PRESERVE]
+    Default: OVERWRITE
   EksAddonVpcCniName:
     Type: String
     Default: vpc-cni
@@ -441,24 +248,109 @@ Parameters:
   EksAddonCoreDnsName:
     Type: String
     Default: coredns
-  EksNodesSecurityGroupDescription:
-    Type: String
-    Default: Additional security group for EKS worker nodes
-  EksNodesSecurityGroupNameSuffix:
-    Type: String
-    Default: -eks-nodes
   EksClusterTagKeyPrefix:
     Type: String
     Default: kubernetes.io/cluster/
   EksClusterTagValue:
     Type: String
     Default: owned
+
+  #  EKS workers
+  EksNodeAmiSsmParameter:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/eks/optimized-ami/1.36/amazon-linux-2023/x86_64/standard/recommended/image_id
+    Description: EKS-optimized AL2023 AMI. The version in the path must match EksClusterVersion.
+  EksNodeInstanceType:
+    Type: String
+    Default: c7i-flex.large
+  EksNodeDesiredSize:
+    Type: Number
+    Default: 2
+  EksNodeMinSize:
+    Type: Number
+    Default: 2
+  EksNodeMaxSize:
+    Type: Number
+    Default: 3
+  EksNodeDiskSize:
+    Type: Number
+    Default: 48
+  EksNodeDiskType:
+    Type: String
+    Default: gp3
+  EksNodeDeviceName:
+    Type: String
+    Default: /dev/xvda
+  EksNodeVolumeEncrypted:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+  EksNodeVolumeDeleteOnTermination:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+  EksNodeMetadataEndpoint:
+    Type: String
+    AllowedValues: [enabled, disabled]
+    Default: enabled
+  EksNodeMetadataTokens:
+    Type: String
+    AllowedValues: [required, optional]
+    Default: required
+  EksNodeMetadataHopLimit:
+    Type: Number
+    Default: 2
+  EksNodeLaunchTemplateSuffix:
+    Type: String
+    Default: -ng
+  EksNodeInstanceNameSuffix:
+    Type: String
+    Default: -eks-node
+  EksNodesEgressCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: Allows node bootstrap to reach AWS APIs through NAT; narrow with VPC endpoints if desired.
+  EksNodesSecurityGroupDescription:
+    Type: String
+    Default: Additional security group for EKS worker nodes
+  EksNodesSecurityGroupNameSuffix:
+    Type: String
+    Default: -eks-nodes
   EksNodesSshIngressDescription:
     Type: String
     Default: SSH from bastion
   EksNodesEgressDescription:
     Type: String
     Default: Node egress
+
+  # ---- ALB
+  AlbNameSuffix:
+    Type: String
+    Default: -alb
+  AlbScheme:
+    Type: String
+    AllowedValues: [internet-facing, internal]
+    Default: internet-facing
+  AlbIngressCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: CIDR allowed to reach the ALB listener. Restrict in prod.
+  AlbListenerPort:
+    Type: Number
+    Default: 80
+  AlbTargetPort:
+    Type: Number
+    Default: 30080
+    Description: NodePort on the worker nodes that the ALB forwards to (30000-32767).
+  AlbHealthCheckPath:
+    Type: String
+    Default: /healthz
+  AlbDeletionProtection:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+
+  # ------------------------------------------------- ALB controller (IAM)
   AlbControllerNamespace:
     Type: String
     Default: kube-system
@@ -472,6 +364,15 @@ Parameters:
     Type: String
     Default: v2.11.0
     Description: AWS Load Balancer Controller release; keep its Helm chart and IAM policy versions aligned.
+
+  # ----- S3
+  S3BucketName:
+    Type: String
+    Default: athena-results-spendsmart-dev
+    Description: Must be globally unique. Change if this bucket name is already taken.
+  DataPrefix:
+    Type: String
+    Default: data
   S3VersioningEnabled:
     Type: String
     AllowedValues: ['true', 'false']
@@ -503,18 +404,69 @@ Parameters:
     Type: String
     AllowedValues: ['true', 'false']
     Default: 'true'
+
+  # -- Athena
+  AthenaWorkgroupName:
+    Type: String
+    Default: spendsmart
+  AthenaResultsPrefix:
+    Type: String
+    Default: athena-results
+  AthenaResultsExpirationDays:
+    Type: Number
+    Default: 30
+  AthenaBytesScannedCutoff:
+    Type: Number
+    Default: 10737418240
+  AthenaWorkgroupState:
+    Type: String
+    AllowedValues: [ENABLED, DISABLED]
+    Default: ENABLED
+  AthenaEnforceWorkgroupConfiguration:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+  AthenaPublishCloudWatchMetrics:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+  AthenaResultEncryptionOption:
+    Type: String
+    AllowedValues: [SSE_S3, SSE_KMS, CSE_KMS]
+    Default: SSE_S3
+  AthenaLifecycleEnabled:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+  AthenaLifecycleStatus:
+    Type: String
+    AllowedValues: [Enabled, Disabled]
+    Default: Enabled
   AthenaLifecycleRuleId:
     Type: String
     Default: expire-athena-results
+
+  # ---- Glue
+  GlueDatabaseName:
+    Type: String
+    Default: spendsmart_analytics
   GlueDatabaseDescription:
     Type: String
     Default: SpendSmart analytics catalog
+  GlueRoleAssumeService:
+    Type: String
+    Default: glue.amazonaws.com
+  GlueServiceRolePolicyArn:
+    Type: String
+    Default: arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
   GlueRoleNameSuffix:
     Type: String
     Default: -glue
   GlueS3PolicyNameSuffix:
     Type: String
     Default: -glue-s3
+
+  # --------------------------------------------------------- Analytics IAM
   AnalyticsRoleNameSuffix:
     Type: String
     Default: -analytics-role
@@ -529,75 +481,42 @@ Parameters:
     Type: String
     Default: Analytics, cost, AWS infrastructure and service metadata access
 
-  # ALB
-  AlbNameSuffix:
-    Type: String
-    Default: -alb
-  AlbScheme:
-    Type: String
-    AllowedValues: [internet-facing, internal]
-    Default: internet-facing
-  AlbIngressCidr:
-    Type: String
-    Default: 0.0.0.0/0
-    Description: CIDR allowed to reach the ALB listener. Restrict in prod.
-  AlbListenerPort:
-    Type: Number
-    Default: 80
-  AlbTargetPort:
-    Type: Number
-    Default: 30080
-    Description: Container port the pods listen on.
-  EksNodeDesiredSize:
-    Type: Number
-    Default: 2
 
-  EksNodeMinSize:
-    Type: Number
-    Default: 2
-    
-  AlbHealthCheckPath:
-    Type: String
-    Default: /healthz
-  AlbDeletionProtection:
-    Type: String
-    AllowedValues: ['true', 'false']
-    Default: 'false'
+# CONDITIONS
 
-  EksNodeAmiSsmParameter:
-    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/eks/optimized-ami/1.36/amazon-linux-2023/x86_64/standard/recommended/image_id
-    Description: EKS-optimized AL2023 AMI. The version in the path must match EksClusterVersion.
-  
-  EksServiceCidr:
-    Type: String
-    Default: 172.20.0.0/16
-    Description: Cluster service CIDR (EKS default for a 10.x VPC).
 Conditions:
+  # Network
   UseDefaultAz1: !Equals [!Ref AvailabilityZone1, '']
   UseDefaultAz2: !Equals [!Ref AvailabilityZone2, '']
   DnsHostnamesEnabled: !Equals [!Ref EnableDnsHostnames, 'true']
   DnsSupportEnabled: !Equals [!Ref EnableDnsSupport, 'true']
   NatEnabled: !Equals [!Ref EnableNatGateway, 'true']
+
+  # Bastion
   CreateBastion: !Equals [!Ref BastionEnabled, 'true']
   CreateBastionEip: !And
     - !Condition CreateBastion
     - !Equals [!Ref BastionAssociateEip, 'true']
   BastionRootEncrypted: !Equals [!Ref BastionRootVolumeEncrypted, 'true']
   BastionRootDeleteOnTermination: !Equals [!Ref BastionRootVolumeDeleteOnTermination, 'true']
+
+  # EKS
   EksBootstrapAdminEnabled: !Equals [!Ref EksBootstrapCreatorAdmin, 'true']
   EksPrivateEndpointEnabled: !Equals [!Ref EksEndpointPrivateAccess, 'true']
   EksPublicEndpointEnabled: !Equals [!Ref EksEndpointPublicAccess, 'true']
   EksNodeVolumeEncryptedCondition: !Equals [!Ref EksNodeVolumeEncrypted, 'true']
   EksNodeVolumeDeleteCondition: !Equals [!Ref EksNodeVolumeDeleteOnTermination, 'true']
+
+  # S3
   S3VersioningEnabledCondition: !Equals [!Ref S3VersioningEnabled, 'true']
   S3BucketKeyEnabledCondition: !Equals [!Ref S3BucketKeyEnabled, 'true']
   S3BlockPublicAclsCondition: !Equals [!Ref S3BlockPublicAcls, 'true']
   S3BlockPublicPolicyCondition: !Equals [!Ref S3BlockPublicPolicy, 'true']
   S3IgnorePublicAclsCondition: !Equals [!Ref S3IgnorePublicAcls, 'true']
   S3RestrictPublicBucketsCondition: !Equals [!Ref S3RestrictPublicBuckets, 'true']
-  UseDefaultAnalyticsPrincipal: !Equals [!Ref AnalyticsTrustedPrincipalArn, '']
   S3UsesKms: !Equals [!Ref S3EncryptionAlgorithm, aws:kms]
+
+  # Athena
   AthenaLifecycleRequested: !Equals [!Ref AthenaLifecycleEnabled, 'true']
   AthenaLifecycleDaysZero: !Equals [!Ref AthenaResultsExpirationDays, '0']
   AthenaLifecycleActive: !And
@@ -606,8 +525,17 @@ Conditions:
   AthenaEnforceConfiguration: !Equals [!Ref AthenaEnforceWorkgroupConfiguration, 'true']
   AthenaPublishMetrics: !Equals [!Ref AthenaPublishCloudWatchMetrics, 'true']
 
-# resources section
+  # Analytics IAM
+  UseDefaultAnalyticsPrincipal: !Equals [!Ref AnalyticsTrustedPrincipalArn, '']
+
+
+# RESOURCES
+
 Resources:
+
+  # ==========================================================================
+  # 1. NETWORK
+  # ==========================================================================
   Vpc:
     Type: AWS::EC2::VPC
     Properties:
@@ -623,7 +551,6 @@ Resources:
           Value: !Ref Environment
         - Key: ManagedBy
           Value: !Ref ManagedByTag
-        
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
@@ -631,7 +558,6 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub '${NamePrefix}${InternetGatewayNameSuffix}'
-
 
   VpcGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
@@ -656,7 +582,6 @@ Resources:
         - Key: !Sub 'kubernetes.io/cluster/${EksClusterName}'
           Value: !Ref ClusterSubnetTagValue
 
-
   PublicSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
@@ -674,7 +599,6 @@ Resources:
         - Key: !Sub 'kubernetes.io/cluster/${EksClusterName}'
           Value: !Ref ClusterSubnetTagValue
 
-
   PrivateSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -690,7 +614,6 @@ Resources:
           Value: !Ref AlbSubnetRoleTag
         - Key: !Sub 'kubernetes.io/cluster/${EksClusterName}'
           Value: !Ref ClusterSubnetTagValue
-
 
   PrivateSubnet2:
     Type: AWS::EC2::Subnet
@@ -723,11 +646,13 @@ Resources:
       RouteTableId: !Ref PublicRouteTable
       DestinationCidrBlock: !Ref InternetRouteCidr
       GatewayId: !Ref InternetGateway
+
   PublicSubnet1RouteAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref PublicSubnet1
       RouteTableId: !Ref PublicRouteTable
+
   PublicSubnet2RouteAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -742,6 +667,7 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub '${NamePrefix}${NatEipNameSuffix}1'
+
   NatGateway1:
     Type: AWS::EC2::NatGateway
     Condition: NatEnabled
@@ -752,6 +678,7 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub '${NamePrefix}${NatGatewayNameSuffix}1'
+
   PrivateRouteTable1:
     Type: AWS::EC2::RouteTable
     Condition: NatEnabled
@@ -760,6 +687,7 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub '${NamePrefix}${PrivateRouteTableNameSuffix}1'
+
   PrivateNatRoute1:
     Type: AWS::EC2::Route
     Condition: NatEnabled
@@ -767,17 +695,22 @@ Resources:
       RouteTableId: !Ref PrivateRouteTable1
       DestinationCidrBlock: !Ref InternetRouteCidr
       NatGatewayId: !Ref NatGateway1
+
   PrivateSubnet1RouteAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref PrivateSubnet1
       RouteTableId: !If [NatEnabled, !Ref PrivateRouteTable1, !Ref PublicRouteTable]
+
   PrivateSubnet2RouteAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref PrivateSubnet2
       RouteTableId: !If [NatEnabled, !Ref PrivateRouteTable1, !Ref PublicRouteTable]
 
+  # ==========================================================================
+  # 2. BASTION
+  # ==========================================================================
   BastionSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Condition: CreateBastion
@@ -789,7 +722,7 @@ Resources:
           FromPort: !Ref BastionSshPort
           ToPort: !Ref BastionSshPort
           CidrIp: !Ref BastionSshCidr
-          Description: !Ref EksNodesSshIngressDescription
+          Description: !Ref BastionSshIngressDescription
       SecurityGroupEgress:
         - IpProtocol: !Ref AllTrafficProtocol
           CidrIp: !Ref BastionEgressCidr
@@ -797,6 +730,7 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub '${NamePrefix}${BastionNameSuffix}'
+
   BastionInstance:
     Type: AWS::EC2::Instance
     Condition: CreateBastion
@@ -823,6 +757,7 @@ Resources:
           Value: !Sub '${NamePrefix}${BastionNameSuffix}'
         - Key: Role
           Value: !Ref BastionRoleTag
+
   BastionEip:
     Type: AWS::EC2::EIP
     Condition: CreateBastionEip
@@ -831,12 +766,141 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub '${NamePrefix}${BastionEipNameSuffix}'
+
   BastionEipAssociation:
     Type: AWS::EC2::EIPAssociation
     Condition: CreateBastionEip
     Properties:
       InstanceId: !Ref BastionInstance
       EIP: !Ref BastionEip
+
+  # ==========================================================================
+  # 3. EKS CONTROL PLANE
+  # ==========================================================================
+  EksClusterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${NamePrefix}${EksClusterRoleNameSuffix}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: !Ref EksClusterRoleAssumeService
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Ref EksClusterPolicyArn
+        - !Ref EksVpcResourceControllerPolicyArn
+
+  EksCluster:
+    Type: AWS::EKS::Cluster
+    DependsOn: [EksClusterRole]
+    Properties:
+      Name: !Ref EksClusterName
+      Version: !Ref EksClusterVersion
+      RoleArn: !GetAtt EksClusterRole.Arn
+      AccessConfig:
+        AuthenticationMode: !Ref EksAuthenticationMode
+        BootstrapClusterCreatorAdminPermissions: !If [EksBootstrapAdminEnabled, true, false]
+      BootstrapSelfManagedAddons: false
+      ResourcesVpcConfig:
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+        EndpointPrivateAccess: !If [EksPrivateEndpointEnabled, true, false]
+        EndpointPublicAccess: !If [EksPublicEndpointEnabled, true, false]
+      UpgradePolicy:
+        SupportType: STANDARD
+
+  # Allows the bastion to reach the private EKS API endpoint (kubectl / helm)
+  BastionToEksApiIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: CreateBastion
+    Properties:
+      GroupId: !GetAtt EksCluster.ClusterSecurityGroupId
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !Ref BastionSecurityGroup
+      Description: Bastion to EKS API
+
+  # ==========================================================================
+  # 4. EKS ADD-ONS
+  # ==========================================================================
+  EksAddonPodIdentityAgent:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !Ref EksCluster
+      AddonName: eks-pod-identity-agent
+      ResolveConflicts: !Ref EksAddonResolveConflicts
+
+  EksAddonVpcCni:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !Ref EksCluster
+      AddonName: !Ref EksAddonVpcCniName
+      ResolveConflicts: !Ref EksAddonResolveConflicts
+
+  EksAddonKubeProxy:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !Ref EksCluster
+      AddonName: !Ref EksAddonKubeProxyName
+      ResolveConflicts: !Ref EksAddonResolveConflicts
+
+  # CoreDNS needs running nodes before it can become ACTIVE
+  EksAddonCoreDns:
+    Type: AWS::EKS::Addon
+    DependsOn: EksWorkerAutoScalingGroup
+    Properties:
+      ClusterName: !Ref EksCluster
+      AddonName: !Ref EksAddonCoreDnsName
+      ResolveConflicts: !Ref EksAddonResolveConflicts
+
+  # ==========================================================================
+  # 5. SECURITY GROUPS (nodes + ALB)
+  # ==========================================================================
+  EksNodesSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Ref EksNodesSecurityGroupDescription
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        # EKS control plane -> kubelet
+        - IpProtocol: tcp
+          FromPort: 10250
+          ToPort: 10250
+          CidrIp: !Ref VpcCidr
+          Description: EKS control plane to kubelet
+      SecurityGroupEgress:
+        - IpProtocol: !Ref AllTrafficProtocol
+          CidrIp: !Ref EksNodesEgressCidr
+          Description: !Ref EksNodesEgressDescription
+      Tags:
+        - Key: Name
+          Value: !Sub '${NamePrefix}${EksNodesSecurityGroupNameSuffix}'
+        - Key: !Sub '${EksClusterTagKeyPrefix}${EksClusterName}'
+          Value: !Ref EksClusterTagValue
+
+  EksNodesSelfIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref EksNodesSecurityGroup
+      IpProtocol: '-1'
+      SourceSecurityGroupId: !Ref EksNodesSecurityGroup
+      Description: Node to node communication
+
+  # Only exists when the bastion exists
+  EksNodesSshFromBastion:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: CreateBastion
+    Properties:
+      GroupId: !Ref EksNodesSecurityGroup
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+      SourceSecurityGroupId: !Ref BastionSecurityGroup
+      Description: !Ref EksNodesSshIngressDescription
 
   AlbSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -854,12 +918,11 @@ Resources:
           FromPort: !Ref AlbTargetPort
           ToPort: !Ref AlbTargetPort
           CidrIp: !Ref VpcCidr
-          Description: ALB to pods
+          Description: ALB to worker nodes
       Tags:
         - Key: Name
           Value: !Sub '${NamePrefix}${AlbNameSuffix}-sg'
 
-  # Lets the ALB reach pods (pod ENIs use the node security group)
   AlbToNodesIngress:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
@@ -868,8 +931,11 @@ Resources:
       FromPort: !Ref AlbTargetPort
       ToPort: !Ref AlbTargetPort
       SourceSecurityGroupId: !Ref AlbSecurityGroup
-      Description: ALB to pods
+      Description: ALB to worker node NodePort
 
+  # ==========================================================================
+  # 6. APPLICATION LOAD BALANCER
+  # ==========================================================================
   ApplicationLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     DependsOn: VpcGatewayAttachment
@@ -931,20 +997,10 @@ Resources:
       DefaultActions:
         - Type: forward
           TargetGroupArn: !Ref AlbTargetGroup
-  EksClusterRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub '${NamePrefix}${EksClusterRoleNameSuffix}'
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: !Ref EksClusterRoleAssumeService
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - !Ref EksClusterPolicyArn
-        - !Ref EksVpcResourceControllerPolicyArn
+
+  # ==========================================================================
+  # 7. EKS WORKER NODES (self-managed ASG, auto-registered in ALB target group)
+  # ==========================================================================
   EksNodeRole:
     Type: AWS::IAM::Role
     Properties:
@@ -961,86 +1017,32 @@ Resources:
         - !Ref EksNodeCniPolicyArn
         - !Ref EksNodeEcrPolicyArn
 
-  EksCluster:
-    Type: AWS::EKS::Cluster
-    DependsOn: [EksClusterRole]
+  EksNodeInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
     Properties:
-      Name: !Ref EksClusterName
-      Version: !Ref EksClusterVersion
-      RoleArn: !GetAtt EksClusterRole.Arn
-      AccessConfig:
-        AuthenticationMode: !Ref EksAuthenticationMode
-        BootstrapClusterCreatorAdminPermissions: !If [EksBootstrapAdminEnabled, true, false]
-      BootstrapSelfManagedAddons: false
-      ResourcesVpcConfig:
-        SubnetIds:
-          - !Ref PrivateSubnet1
-          - !Ref PrivateSubnet2
-        EndpointPrivateAccess: true
-        EndpointPublicAccess: false
-      UpgradePolicy:
-        SupportType: STANDARD
+      InstanceProfileName: !Sub '${NamePrefix}-eks-node-profile'
+      Roles:
+        - !Ref EksNodeRole
 
-  EksAddonPodIdentityAgent:
-    Type: AWS::EKS::Addon
+  # Lets self-managed nodes join the cluster
+  EksNodeAccessEntry:
+    Type: AWS::EKS::AccessEntry
     Properties:
       ClusterName: !Ref EksCluster
-      AddonName: eks-pod-identity-agent
-      ResolveConflicts: !Ref EksAddonResolveConflicts
-
-  EksNodesSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: !Ref EksNodesSecurityGroupDescription
-      VpcId: !Ref Vpc
-
-      SecurityGroupIngress:
-
-        # EKS control plane -> kubelet
-        - IpProtocol: tcp
-          FromPort: 10250
-          ToPort: 10250
-          CidrIp: !Ref VpcCidr
-
-          Description: EKS control plane to kubelet
-
-        # SSH from bastion
-        # SSH from bastion
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          SourceSecurityGroupId: !Ref BastionSecurityGroup
-          Description: SSH from bastion
-
-
-      SecurityGroupEgress:
-        - IpProtocol: -1
-          CidrIp: 0.0.0.0/0
-          Description: Node egress
-
-      Tags:
-        - Key: Name
-          Value: !Sub '${NamePrefix}${EksNodesSecurityGroupNameSuffix}'
-
-        - Key: !Sub '${EksClusterTagKeyPrefix}${EksClusterName}'
-          Value: !Ref EksClusterTagValue
-
-  EksNodesSelfIngress:
-    Type: AWS::EC2::SecurityGroupIngress
-    Properties:
-      GroupId: !Ref EksNodesSecurityGroup
-      IpProtocol: -1
-      SourceSecurityGroupId: !Ref EksNodesSecurityGroup
-      Description: Node to node communication
+      PrincipalArn: !GetAtt EksNodeRole.Arn
+      Type: EC2_LINUX
 
   EksNodeLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
       LaunchTemplateName: !Sub '${NamePrefix}${EksNodeLaunchTemplateSuffix}'
       LaunchTemplateData:
+        ImageId: !Ref EksNodeAmiSsmParameter
+        InstanceType: !Ref EksNodeInstanceType
         KeyName: !Ref Ec2KeyName
+        IamInstanceProfile:
+          Arn: !GetAtt EksNodeInstanceProfile.Arn
         SecurityGroupIds:
-          
           - !Ref EksNodesSecurityGroup
           - !GetAtt EksCluster.ClusterSecurityGroupId
         BlockDeviceMappings:
@@ -1048,111 +1050,76 @@ Resources:
             Ebs:
               VolumeSize: !Ref EksNodeDiskSize
               VolumeType: !Ref EksNodeDiskType
-              Encrypted: !If
-                - EksNodeVolumeEncryptedCondition
-                - true
-                - false
-              DeleteOnTermination: !If
-                - EksNodeVolumeDeleteCondition
-                - true
-                - false
+              Encrypted: !If [EksNodeVolumeEncryptedCondition, true, false]
+              DeleteOnTermination: !If [EksNodeVolumeDeleteCondition, true, false]
         MetadataOptions:
           HttpEndpoint: !Ref EksNodeMetadataEndpoint
           HttpTokens: !Ref EksNodeMetadataTokens
           HttpPutResponseHopLimit: !Ref EksNodeMetadataHopLimit
+        UserData:
+          Fn::Base64: !Sub |
+            MIME-Version: 1.0
+            Content-Type: multipart/mixed; boundary="BOUNDARY"
+
+            --BOUNDARY
+            Content-Type: application/node.eks.aws
+
+            ---
+            apiVersion: node.eks.aws/v1alpha1
+            kind: NodeConfig
+            spec:
+              cluster:
+                name: ${EksCluster}
+                apiServerEndpoint: ${EksCluster.Endpoint}
+                certificateAuthority: ${EksCluster.CertificateAuthorityData}
+                cidr: ${EksServiceCidr}
+
+            --BOUNDARY--
         TagSpecifications:
           - ResourceType: instance
             Tags:
               - Key: Name
                 Value: !Sub '${NamePrefix}${EksNodeInstanceNameSuffix}'
 
-  EksNodeGroupAz1:
-    Type: AWS::EKS::Nodegroup
-
-    Properties:
-      ClusterName: !Ref EksCluster
-      NodegroupName: !Sub '${EksNodeGroupNamePrefix}1'
-      NodeRole: !GetAtt EksNodeRole.Arn
-
-      Subnets:
-        - !Ref PrivateSubnet1
-
-      InstanceTypes:
-        - !Ref EksNodeInstanceType
-
-      AmiType: !Ref EksNodeAmiType
-      CapacityType: !Ref EksNodeCapacityType
-
-      LaunchTemplate:
-        Id: !Ref EksNodeLaunchTemplate
-        Version: !GetAtt EksNodeLaunchTemplate.LatestVersionNumber
-
-      ScalingConfig:
-        DesiredSize: !Ref EksNodeDesiredSize
-        MinSize: !Ref EksNodeMinSize
-        MaxSize: !Ref EksNodeMaxSize
-
-      UpdateConfig:
-        MaxUnavailable: !Ref EksNodeUpdateMaxUnavailable
-
-      Labels:
-        spendsmart.io/az: !If
-          - UseDefaultAz1
-          - !Select [0, !GetAZs '']
-          - !Ref AvailabilityZone1
-
-      Tags:
-        Name: !Sub '${NamePrefix}${EksNodeGroupTagNameSuffix}1'
-
+  EksWorkerAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
     DependsOn:
+      - AlbListener            # target group must be attached to an LB before the ASG can use it
+      - EksNodeAccessEntry
       - EksAddonVpcCni
       - EksAddonKubeProxy
-      - EksAddonCoreDns
-
-    
-  EksNodeGroupAz2:
-    Type: AWS::EKS::Nodegroup
+      - EksAddonPodIdentityAgent
     Properties:
-      ClusterName: !Ref EksCluster
-      NodegroupName: !Sub '${EksNodeGroupNamePrefix}2'
-      NodeRole: !GetAtt EksNodeRole.Arn
-      Subnets: [!Ref PrivateSubnet2]
-      InstanceTypes: [!Ref EksNodeInstanceType]
-      AmiType: !Ref EksNodeAmiType
-      CapacityType: !Ref EksNodeCapacityType
+      AutoScalingGroupName: !Sub '${NamePrefix}-eks-workers'
+      MinSize: !Ref EksNodeMinSize
+      MaxSize: !Ref EksNodeMaxSize
+      DesiredCapacity: !Ref EksNodeDesiredSize
+      VPCZoneIdentifier:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
       LaunchTemplate:
-        Id: !Ref EksNodeLaunchTemplate
+        LaunchTemplateId: !Ref EksNodeLaunchTemplate
         Version: !GetAtt EksNodeLaunchTemplate.LatestVersionNumber
-      ScalingConfig:
-        DesiredSize: !Ref EksNodeDesiredSize
-        MinSize: !Ref EksNodeMinSize
-        MaxSize: !Ref EksNodeMaxSize
-      UpdateConfig:
-        MaxUnavailable: !Ref EksNodeUpdateMaxUnavailable
-      Labels:
-        spendsmart.io/az: !If [UseDefaultAz2, !Select [1, !GetAZs ''], !Ref AvailabilityZone2]
+      TargetGroupARNs:
+        - !Ref AlbTargetGroup
+      HealthCheckType: EC2
+      HealthCheckGracePeriod: 300
       Tags:
-        Name: !Sub '${NamePrefix}${EksNodeGroupTagNameSuffix}2'
+        - Key: Name
+          Value: !Sub '${NamePrefix}${EksNodeInstanceNameSuffix}'
+          PropagateAtLaunch: true
+        - Key: !Sub '${EksClusterTagKeyPrefix}${EksClusterName}'
+          Value: !Ref EksClusterTagValue
+          PropagateAtLaunch: true
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: !Ref EksNodeMinSize
+        MaxBatchSize: 1
+        PauseTime: PT5M
 
-  EksAddonVpcCni:
-    Type: AWS::EKS::Addon
-    Properties:
-      ClusterName: !Ref EksCluster
-      AddonName: !Ref EksAddonVpcCniName
-      ResolveConflicts: !Ref EksAddonResolveConflicts
-  EksAddonKubeProxy:
-    Type: AWS::EKS::Addon
-    Properties:
-      ClusterName: !Ref EksCluster
-      AddonName: !Ref EksAddonKubeProxyName
-      ResolveConflicts: !Ref EksAddonResolveConflicts
-  EksAddonCoreDns:
-    Type: AWS::EKS::Addon
-    Properties:
-      ClusterName: !Ref EksCluster
-      AddonName: !Ref EksAddonCoreDnsName
-      ResolveConflicts: !Ref EksAddonResolveConflicts
-
+  # ==========================================================================
+  # 8. AWS LOAD BALANCER CONTROLLER (IAM + Pod Identity)
+  # ==========================================================================
   AlbControllerRole:
     Type: AWS::IAM::Role
     Properties:
@@ -1228,22 +1195,21 @@ Resources:
                   - shield:DeleteProtection
                 Resource: '*'
               - Effect: Allow
-                Action: [ec2:AuthorizeSecurityGroupIngress, ec2:RevokeSecurityGroupIngress]
-                Resource: '*'
-              - Effect: Allow
                 Action: [ec2:CreateSecurityGroup]
                 Resource: '*'
-              - Effect: Allow
-                Action: [ec2:CreateTags]
-                Resource: !Sub 'arn:${AWS::Partition}:ec2:*:*:security-group/*'
               - Effect: Allow
                 Action: [ec2:CreateTags, ec2:DeleteTags]
                 Resource: !Sub 'arn:${AWS::Partition}:ec2:*:*:security-group/*'
               - Effect: Allow
-                Action: [ec2:AuthorizeSecurityGroupIngress, ec2:RevokeSecurityGroupIngress, ec2:DeleteSecurityGroup]
+                Action:
+                  - ec2:AuthorizeSecurityGroupIngress
+                  - ec2:RevokeSecurityGroupIngress
+                  - ec2:DeleteSecurityGroup
                 Resource: '*'
               - Effect: Allow
-                Action: [elasticloadbalancing:CreateLoadBalancer, elasticloadbalancing:CreateTargetGroup]
+                Action:
+                  - elasticloadbalancing:CreateLoadBalancer
+                  - elasticloadbalancing:CreateTargetGroup
                 Resource: '*'
               - Effect: Allow
                 Action:
@@ -1279,12 +1245,6 @@ Resources:
                   - elasticloadbalancing:ModifyCapacityReservation
                 Resource: '*'
               - Effect: Allow
-                Action: [elasticloadbalancing:AddTags]
-                Resource:
-                  - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:targetgroup/*/*'
-                  - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:loadbalancer/net/*/*'
-                  - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:loadbalancer/app/*/*'
-              - Effect: Allow
                 Action: [elasticloadbalancing:RegisterTargets, elasticloadbalancing:DeregisterTargets]
                 Resource: !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:targetgroup/*/*'
               - Effect: Allow
@@ -1295,6 +1255,7 @@ Resources:
                   - elasticloadbalancing:RemoveListenerCertificates
                   - elasticloadbalancing:ModifyRule
                 Resource: '*'
+
   AlbControllerPodIdentityAssociation:
     Type: AWS::EKS::PodIdentityAssociation
     Properties:
@@ -1303,6 +1264,9 @@ Resources:
       ServiceAccount: !Ref AlbControllerServiceAccountName
       RoleArn: !GetAtt AlbControllerRole.Arn
 
+  # ==========================================================================
+  # 9. S3 DATA BUCKET
+  # ==========================================================================
   DataBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
@@ -1316,7 +1280,10 @@ Resources:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: !Ref S3EncryptionAlgorithm
               KMSMasterKeyID: !If [S3UsesKms, !Ref S3KmsKeyArn, !Ref 'AWS::NoValue']
-            BucketKeyEnabled: !If [S3UsesKms, !If [S3BucketKeyEnabledCondition, true, false], !Ref 'AWS::NoValue']
+            BucketKeyEnabled: !If
+              - S3UsesKms
+              - !If [S3BucketKeyEnabledCondition, true, false]
+              - !Ref 'AWS::NoValue'
       PublicAccessBlockConfiguration:
         BlockPublicAcls: !If [S3BlockPublicAclsCondition, true, false]
         BlockPublicPolicy: !If [S3BlockPublicPolicyCondition, true, false]
@@ -1336,6 +1303,9 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
 
+  # ==========================================================================
+  # 10. GLUE
+  # ==========================================================================
   GlueDatabase:
     Type: AWS::Glue::Database
     Properties:
@@ -1343,6 +1313,7 @@ Resources:
       DatabaseInput:
         Name: !Ref GlueDatabaseName
         Description: !Ref GlueDatabaseDescription
+
   GlueRole:
     Type: AWS::IAM::Role
     Properties:
@@ -1368,6 +1339,9 @@ Resources:
                 Action: [s3:ListBucket]
                 Resource: !GetAtt DataBucket.Arn
 
+  # ==========================================================================
+  # 11. ATHENA
+  # ==========================================================================
   AthenaWorkgroup:
     Type: AWS::Athena::WorkGroup
     Properties:
@@ -1382,6 +1356,9 @@ Resources:
           EncryptionConfiguration:
             EncryptionOption: !Ref AthenaResultEncryptionOption
 
+  # ==========================================================================
+  # 12. ANALYTICS IAM
+  # ==========================================================================
   AnalyticsRole:
     Type: AWS::IAM::Role
     Properties:
@@ -1392,7 +1369,10 @@ Resources:
           - Sid: AllowTrustedPrincipal
             Effect: Allow
             Principal:
-              AWS: !If [UseDefaultAnalyticsPrincipal, !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root', !Ref AnalyticsTrustedPrincipalArn]
+              AWS: !If
+                - UseDefaultAnalyticsPrincipal
+                - !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+                - !Ref AnalyticsTrustedPrincipalArn
             Action: sts:AssumeRole
       Tags:
         - Key: Name
@@ -1401,6 +1381,7 @@ Resources:
           Value: !Ref ProjectName
         - Key: Environment
           Value: !Ref Environment
+
   AnalyticsPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
@@ -1502,7 +1483,13 @@ Resources:
             Resource: '*'
           - Sid: ECSMetadata
             Effect: Allow
-            Action: [ecs:ListClusters, ecs:DescribeClusters, ecs:ListTasks, ecs:DescribeTasks, ecs:ListServices, ecs:DescribeServices]
+            Action:
+              - ecs:ListClusters
+              - ecs:DescribeClusters
+              - ecs:ListTasks
+              - ecs:DescribeTasks
+              - ecs:ListServices
+              - ecs:DescribeServices
             Resource: '*'
           - Sid: ECRMetadata
             Effect: Allow
@@ -1521,10 +1508,21 @@ Resources:
               - eks:DescribeFargateProfile
             Resource: '*'
 
+
+# OUTPUTS
+
 Outputs:
+
+  # ---- Network
   VpcId:
     Description: Terraform output vpc_id
     Value: !Ref Vpc
+  VpcCidr:
+    Description: Terraform output vpc_cidr
+    Value: !GetAtt Vpc.CidrBlock
+  InternetGatewayId:
+    Description: Terraform output internet_gateway_id
+    Value: !Ref InternetGateway
   PublicSubnetIds:
     Description: Terraform output public_subnet_ids; JSON-encoded AZ-to-subnet map
     Value: !Sub
@@ -1541,17 +1539,30 @@ Outputs:
         Zone2: !If [UseDefaultAz2, !Select [1, !GetAZs ''], !Ref AvailabilityZone2]
         Subnet1: !Ref PrivateSubnet1
         Subnet2: !Ref PrivateSubnet2
+  NatGatewayIds:
+    Description: Terraform output nat_gateway_ids; JSON-encoded AZ-to-NAT map
+    Value: !If
+      - NatEnabled
+      - !Sub
+        - '{"${Zone1}":"${Nat1}"}'
+        - Zone1: !If [UseDefaultAz1, !Select [0, !GetAZs ''], !Ref AvailabilityZone1]
+          Nat1: !Ref NatGateway1
+      - '{}'
+
+  # ---- Bastion
+  SshKeyPairName:
+    Value: !Ref Ec2KeyName
   BastionInstanceId:
     Condition: CreateBastion
     Value: !Ref BastionInstance
   BastionSecurityGroupId:
     Condition: CreateBastion
     Value: !Ref BastionSecurityGroup
-  SshKeyPairName:
-    Value: !Ref Ec2KeyName
   BastionPublicIp:
     Condition: CreateBastion
     Value: !If [CreateBastionEip, !Ref BastionEip, !GetAtt BastionInstance.PublicIp]
+
+  # ---- EKS
   EksClusterName:
     Value: !Ref EksCluster
   EksClusterEndpoint:
@@ -1562,14 +1573,22 @@ Outputs:
     Value: !GetAtt EksCluster.ClusterSecurityGroupId
   EksNodesSecurityGroupId:
     Value: !Ref EksNodesSecurityGroup
-  EksNodeGroupNames:
-    Description: Terraform output eks_node_group_names; JSON-encoded string array
-    Value: !Sub
-      - '["${NodeGroup1}","${NodeGroup2}"]'
-      - NodeGroup1: !Ref EksNodeGroupAz1
-        NodeGroup2: !Ref EksNodeGroupAz2
+  EksWorkerAutoScalingGroupName:
+    Value: !Ref EksWorkerAutoScalingGroup
   EksConfigureKubectl:
     Value: !Sub 'aws eks update-kubeconfig --region ${AWS::Region} --name ${EksCluster}'
+
+  # ---- ALB
+  AlbArn:
+    Value: !Ref ApplicationLoadBalancer
+  AlbDnsName:
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
+  AlbTargetGroupArn:
+    Value: !Ref AlbTargetGroup
+  AlbSecurityGroupId:
+    Value: !Ref AlbSecurityGroup
+
+  # ---- ALB controller
   AlbControllerRoleArn:
     Description: IAM role assumed by the AWS Load Balancer Controller through EKS Pod Identity
     Value: !GetAtt AlbControllerRole.Arn
@@ -1579,6 +1598,8 @@ Outputs:
     Value: !Ref AlbControllerServiceAccountName
   AlbControllerVersion:
     Value: !Ref AlbControllerVersion
+
+  # ---- Data / analytics
   BucketName:
     Value: !Ref DataBucket
   DataLocation:
@@ -1599,24 +1620,3 @@ Outputs:
     Value: !Sub '${NamePrefix}${AnalyticsPolicyNameSuffix}'
   AnalyticsIamPolicyArn:
     Value: !Ref AnalyticsPolicy
-  VpcCidr:
-    Description: Terraform output vpc_cidr
-    Value: !GetAtt Vpc.CidrBlock
-  NatGatewayIds:
-    Description: Terraform output nat_gateway_ids; JSON-encoded AZ-to-NAT map
-    Value: !If
-      - NatEnabled
-      - !Sub
-        - '{"${Zone1}":"${Nat1}"}'
-        - Zone1: !If [UseDefaultAz1, !Select [0, !GetAZs ''], !Ref AvailabilityZone1]
-          Nat1: !Ref NatGateway1
-      - '{}'
-  InternetGatewayId:
-    Description: Terraform output internet_gateway_id
-    Value: !Ref InternetGateway
-  AlbDnsName:
-    Value: !GetAtt ApplicationLoadBalancer.DNSName
-  AlbTargetGroupArn:
-    Value: !Ref AlbTargetGroup
-  AlbSecurityGroupId:
-    Value: !Ref AlbSecurityGroup
