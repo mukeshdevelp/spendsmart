@@ -544,6 +544,7 @@ Resources:
       TargetGroupAttributes:
         - Key: deregistration_delay.timeout_seconds
           Value: '30'
+      
       Tags:
         - Key: Project
           Value: !Ref ProjectName
@@ -691,7 +692,9 @@ Resources:
                   - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:loadbalancer/net/*/*'
                   - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:loadbalancer/app/*/*'
               - Effect: Allow
-                Action: [elasticloadbalancing:RegisterTargets, elasticloadbalancing:DeregisterTargets]
+                Action: 
+                  - elasticloadbalancing:RegisterTargets 
+                  - elasticloadbalancing:DeregisterTargets
                 Resource: !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:targetgroup/*/*'
               - Effect: Allow
                 Action:

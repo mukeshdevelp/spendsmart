@@ -39,3 +39,50 @@ For an update, run `aws cloudformation package` again and pass the resulting `pa
 aws cloudformation delete-stack --stack-name spendsmart-dev --region us-east-1
 aws cloudformation wait stack-delete-complete --stack-name spendsmart-dev --region us-east-1
 ```
+
+# 1. Validate the local root template
+aws cloudformation create-stack \
+  --stack-name spendsmart-dev \
+  --template-body file://CFT/main.yml \
+  --parameters ParameterKey=Ec2KeyName,ParameterValue=mukesh \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --region us-east-1
+
+
+
+# 2. Package the local modules
+aws cloudformation package \
+  --template-file CFT/main.yml \
+  --s3-bucket spendsmart-cfn-packages \
+  --output-template-file packaged-template.yaml \
+  --region us-east-1
+
+# 3. Deploy
+aws cloudformation deploy \
+  --stack-name spendsmart-dev \
+  --template-file packaged-template.yaml \
+  --parameter-overrides Ec2KeyName=mukesh \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --region us-east-1
+
+# 4. Wait
+aws cloudformation wait stack-create-complete \
+  --stack-name spendsmart-dev \
+  --region us-east-1
+
+
+# packaged commands
+
+aws cloudformation package \
+  --template-file CFT/main.yml \
+  --s3-bucket spendsmart-cfn-packages \
+  --output-template-file packaged-template.yaml \
+  --region us-east-1
+
+  
+aws cloudformation deploy \
+  --template-file /home/mukesh/Desktop/spendsmart/packaged-template.yaml \
+  --stack-name spendsmart-dev \
+  --parameter-overrides Ec2KeyName=mukesh \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --region us-east-1

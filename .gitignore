@@ -16,3 +16,4 @@ tfplan-*
 tfplan
 *-iam
 .venv
+packaged-template.yaml
