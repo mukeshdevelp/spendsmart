@@ -211,42 +211,11 @@ Parameters:
     Type: String
     Default: v2.11.0
     Description: AWS Load Balancer Controller release; keep its Helm chart and IAM policy versions aligned.
-  AlbNameSuffix:
-    Type: String
-    Default: -alb
-  
-  AlbScheme:
-    Type: String
-    AllowedValues: [internet-facing, internal]
-    Default: internet-facing
-  AlbIngressCidr:
-    Type: String
-    Default: 0.0.0.0/0
-    Description: CIDR allowed to reach the ALB listener. Restrict in prod.
-  AlbListenerPort:
-    Type: Number
-    Default: 80
-  AlbTargetPort:
-    Type: Number
-    Default: 30080
-    Description: Container port the pods listen on.
-  AlbHealthCheckPath:
-    Type: String
-    Default: /healthz
-  AlbDeletionProtection:
-    Type: String
-    AllowedValues: ['true', 'false']
-    Default: 'false'
-
   VpcId:
     Type: String
   PrivateSubnet1Id:
     Type: String
   PrivateSubnet2Id:
-    Type: String
-  PublicSubnet1Id:
-    Type: String
-  PublicSubnet2Id:
     Type: String
   BastionSecurityGroupId:
     Type: String
@@ -466,6 +435,7 @@ Resources:
       NodeRole: !GetAtt EksNodeRole.Arn
       Subnets:
         - !Ref PrivateSubnet1Id
+        - !Ref PrivateSubnet2Id
       InstanceTypes:
         - !Ref EksNodeInstanceType
       AmiType: !Ref EksNodeAmiType
@@ -479,8 +449,6 @@ Resources:
         MaxSize: !Ref EksNodeMaxSize
       UpdateConfig:
         MaxUnavailable: !Ref EksNodeUpdateMaxUnavailable
-      Labels:
-        spendsmart.io/az: az1
       Tags:
         Name: !Sub '${NamePrefix}${EksNodeGroupTagNameSuffix}1'
       
@@ -498,6 +466,7 @@ Resources:
       NodeRole: !GetAtt EksNodeRole.Arn
       Subnets:
         - !Ref PrivateSubnet2Id
+        - !Ref PrivateSubnet1Id
       InstanceTypes:
         - !Ref EksNodeInstanceType
       AmiType: !Ref EksNodeAmiType
@@ -511,8 +480,6 @@ Resources:
         MaxSize: !Ref EksNodeMaxSize
       UpdateConfig:
         MaxUnavailable: !Ref EksNodeUpdateMaxUnavailable
-      Labels:
-        spendsmart.io/az: az2
       Tags:
         Name: !Sub '${NamePrefix}${EksNodeGroupTagNameSuffix}2'
     
@@ -538,108 +505,6 @@ Resources:
       AddonName: !Ref EksAddonCoreDnsName
       ResolveConflicts: !Ref EksAddonResolveConflicts
 
-  AlbSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: ALB security group
-      VpcId: !Ref VpcId
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: !Ref AlbListenerPort
-          ToPort: !Ref AlbListenerPort
-          CidrIp: !Ref AlbIngressCidr
-          Description: Client access to ALB
-      SecurityGroupEgress:
-        - IpProtocol: tcp
-          FromPort: !Ref AlbTargetPort
-          ToPort: !Ref AlbTargetPort
-          CidrIp: !Ref VpcCidr
-          Description: ALB to pods
-      Tags:
-        - Key: Name
-          Value: !Sub '${NamePrefix}${AlbNameSuffix}-sg'
-
-  # Lets the ALB reach pods (pod ENIs use the node security group)
-  AlbToNodesIngress:
-    Type: AWS::EC2::SecurityGroupIngress
-    Properties:
-      GroupId: !Ref EksNodesSecurityGroup
-      IpProtocol: tcp
-      FromPort: !Ref AlbTargetPort
-      ToPort: !Ref AlbTargetPort
-      SourceSecurityGroupId: !Ref AlbSecurityGroup
-      Description: ALB to pods
-
-  ApplicationLoadBalancer:
-    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
-    DependsOn:
-      - EksNodeGroupAz1
-      - EksNodeGroupAz2
-    Properties:
-      Name: !Sub '${NamePrefix}${AlbNameSuffix}'
-      Type: application
-      Scheme: !Ref AlbScheme
-      IpAddressType: ipv4
-      Subnets:
-        - !Ref PublicSubnet1Id
-        - !Ref PublicSubnet2Id
-      SecurityGroups:
-        - !Ref AlbSecurityGroup
-      LoadBalancerAttributes:
-        - Key: deletion_protection.enabled
-          Value: !Ref AlbDeletionProtection
-        - Key: idle_timeout.timeout_seconds
-          Value: '60'
-        - Key: routing.http.drop_invalid_header_fields.enabled
-          Value: 'true'
-      Tags:
-        - Key: Project
-          Value: !Ref ProjectName
-        - Key: Environment
-          Value: !Ref Environment
-
-  AlbTargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    DependsOn:
-      - EksNodeGroupAz1
-      - EksNodeGroupAz2
-    Properties:
-      Name: !Sub '${NamePrefix}-tg'
-      VpcId: !Ref VpcId
-      Protocol: HTTP
-      Port: !Ref AlbTargetPort
-      TargetType: instance
-      HealthCheckProtocol: HTTP
-      HealthCheckPort: traffic-port
-      HealthCheckPath: !Ref AlbHealthCheckPath
-      HealthCheckIntervalSeconds: 15
-      HealthCheckTimeoutSeconds: 5
-      HealthyThresholdCount: 2
-      UnhealthyThresholdCount: 3
-      Matcher:
-        HttpCode: '200-399'
-      TargetGroupAttributes:
-        - Key: deregistration_delay.timeout_seconds
-          Value: '30'
-      
-      Tags:
-        - Key: Project
-          Value: !Ref ProjectName
-        - Key: Environment
-          Value: !Ref Environment
-
-  AlbListener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    DependsOn:
-      - EksNodeGroupAz1
-      - EksNodeGroupAz2
-    Properties:
-      LoadBalancerArn: !Ref ApplicationLoadBalancer
-      Port: !Ref AlbListenerPort
-      Protocol: HTTP
-      DefaultActions:
-        - Type: forward
-          TargetGroupArn: !Ref AlbTargetGroup
   AlbControllerRole:
     Type: AWS::IAM::Role
     Properties:
@@ -833,13 +698,6 @@ Outputs:
   AlbControllerVersion:
     Value: !Ref AlbControllerVersion
 
-  AlbDnsName:
-    Value: !GetAtt ApplicationLoadBalancer.DNSName
-  AlbTargetGroupArn:
-    Value: !Ref AlbTargetGroup
-  AlbSecurityGroupId:
-    Value: !Ref AlbSecurityGroup
-  
   # EksNodeGroupNames:
   #   Description: Auto Scaling group name (JSON array for compatibility)
   #   Value: !Sub '["${EksNodeAutoScalingGroup}"]'

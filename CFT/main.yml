@@ -525,34 +525,6 @@ Parameters:
     Type: String
     Default: Analytics, cost, AWS infrastructure and service metadata access
 
-  # ALB
-  AlbNameSuffix:
-    Type: String
-    Default: -alb
-  AlbScheme:
-    Type: String
-    AllowedValues: [internet-facing, internal]
-    Default: internet-facing
-  AlbIngressCidr:
-    Type: String
-    Default: 0.0.0.0/0
-    Description: CIDR allowed to reach the ALB listener. Restrict in prod.
-  AlbListenerPort:
-    Type: Number
-    Default: 80
-  AlbTargetPort:
-    Type: Number
-    Default: 30080
-    Description: Container port the pods listen on.
-  
-  AlbHealthCheckPath:
-    Type: String
-    Default: /healthz
-  AlbDeletionProtection:
-    Type: String
-    AllowedValues: ['true', 'false']
-    Default: 'false'
-
   EksNodeAmiSsmParameter:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/eks/optimized-ami/1.36/amazon-linux-2023/x86_64/standard/recommended/image_id
@@ -562,6 +534,33 @@ Parameters:
     Type: String
     Default: 172.20.0.0/16
     Description: Cluster service CIDR (EKS default for a 10.x VPC).
+
+  DeploySpendSmart:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+    Description: Install the SpendSmart Helm chart after required Kubernetes secrets have been created.
+
+  SpendSmartValuesS3Uri:
+    Type: String
+    Default: ''
+    Description: Optional S3 URI for non-secret Helm overrides. Pair with SpendSmartValuesS3ObjectArn; do not store credentials in this file.
+
+  SpendSmartValuesS3ObjectArn:
+    Type: String
+    Default: ''
+    Description: Exact S3 object ARN for the optional Helm values file, for example arn:aws:s3:::bucket/path/values.yaml.
+
+  SpendSmartAlbScheme:
+    Type: String
+    AllowedValues: [internet-facing, internal]
+    Default: internet-facing
+
+  AlbControllerChartVersion:
+    Type: String
+    Default: '1.11.0'
+    Description: AWS Load Balancer Controller Helm chart version matching AlbControllerVersion.
+
 Conditions:
   UseDefaultAz1: !Equals [!Ref AvailabilityZone1, '']
   UseDefaultAz2: !Equals [!Ref AvailabilityZone2, '']
@@ -594,6 +593,7 @@ Conditions:
     - !Not [!Condition AthenaLifecycleDaysZero]
   AthenaEnforceConfiguration: !Equals [!Ref AthenaEnforceWorkgroupConfiguration, 'true']
   AthenaPublishMetrics: !Equals [!Ref AthenaPublishCloudWatchMetrics, 'true']
+  DeploySpendSmartCondition: !Equals [!Ref DeploySpendSmart, 'true']
 
 # resources section
 Resources:
@@ -721,21 +721,31 @@ Resources:
         AlbControllerServiceAccountName: !Ref AlbControllerServiceAccountName
         AlbControllerIamPolicyNameSuffix: !Ref AlbControllerIamPolicyNameSuffix
         AlbControllerVersion: !Ref AlbControllerVersion
-        AlbNameSuffix: !Ref AlbNameSuffix
-        AlbScheme: !Ref AlbScheme
-        AlbIngressCidr: !Ref AlbIngressCidr
-        AlbListenerPort: !Ref AlbListenerPort
-        AlbTargetPort: !Ref AlbTargetPort
-        AlbHealthCheckPath: !Ref AlbHealthCheckPath
-        AlbDeletionProtection: !Ref AlbDeletionProtection
         VpcId: !GetAtt Network.Outputs.VpcId
         PrivateSubnet1Id: !GetAtt Network.Outputs.PrivateSubnet1Id
         PrivateSubnet2Id: !GetAtt Network.Outputs.PrivateSubnet2Id
-        PublicSubnet1Id: !GetAtt Network.Outputs.PublicSubnet1Id
-        PublicSubnet2Id: !GetAtt Network.Outputs.PublicSubnet2Id
         BastionSecurityGroupId: !If [CreateBastion, !GetAtt Bastion.Outputs.BastionSecurityGroupId, '']
         # EksNodeAmiId: !Ref EksNodeAmiSsmParameter
         # EksServiceCidr: !Ref EksServiceCidr
+
+  SpendSmart:
+    Type: AWS::CloudFormation::Stack
+    Condition: DeploySpendSmartCondition
+    DependsOn: Eks
+    Properties:
+      TemplateURL: ./modules/spendsmart/template.yaml
+      Parameters:
+        ClusterName: !GetAtt Eks.Outputs.EksClusterName
+        VpcId: !GetAtt Network.Outputs.VpcId
+        PrivateSubnetId: !GetAtt Network.Outputs.PrivateSubnet1Id
+        ChartRepository: https://github.com/OT-CONTAINER-KIT/helm-charts.git
+        ChartBranch: feature/spendsmart-helm-chart
+        Namespace: spendsmart
+        ValuesS3Uri: !Ref SpendSmartValuesS3Uri
+        ValuesS3ObjectArn: !Ref SpendSmartValuesS3ObjectArn
+        AlbScheme: !Ref SpendSmartAlbScheme
+        AlbControllerVersion: !Ref AlbControllerVersion
+        AlbControllerChartVersion: !Ref AlbControllerChartVersion
 
   S3:
     Type: AWS::CloudFormation::Stack
@@ -849,12 +859,15 @@ Outputs:
     Value: !GetAtt Eks.Outputs.AlbControllerServiceAccountName
   AlbControllerVersion:
     Value: !GetAtt Eks.Outputs.AlbControllerVersion
-  AlbDnsName:
-    Value: !GetAtt Eks.Outputs.AlbDnsName
-  AlbTargetGroupArn:
-    Value: !GetAtt Eks.Outputs.AlbTargetGroupArn
-  AlbSecurityGroupId:
-    Value: !GetAtt Eks.Outputs.AlbSecurityGroupId
+  SpendSmartDeploymentHostId:
+    Condition: DeploySpendSmartCondition
+    Value: !GetAtt SpendSmart.Outputs.DeploymentHostId
+  SpendSmartNamespace:
+    Condition: DeploySpendSmartCondition
+    Value: !GetAtt SpendSmart.Outputs.Namespace
+  SpendSmartIngressName:
+    Condition: DeploySpendSmartCondition
+    Value: !GetAtt SpendSmart.Outputs.IngressName
   BucketName:
     Value: !GetAtt S3.Outputs.BucketName
   DataLocation:

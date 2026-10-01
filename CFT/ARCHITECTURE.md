@@ -2,9 +2,9 @@
 
 ## Purpose and Ownership
 
-The modular CloudFormation root stack provisions AWS infrastructure through nested templates under `modules/`. Kubernetes and Helm manage the application runtime and AWS Load Balancer Controller workload.
+The modular CloudFormation root stack provisions AWS infrastructure through nested templates under `modules/`. When enabled, the SpendSmart nested module uses a private deployment host to install the AWS Load Balancer Controller and application chart.
 
-CloudFormation provisions the ALB security group, load balancer, listener, and target group. The controller role and Pod Identity association are also provisioned; install the controller workload separately.
+The AWS Load Balancer Controller owns the application ALB and target group. It registers worker-node instances through the frontend NodePort Service and reconciles membership as nodes change.
 
 ## Module Layout
 
@@ -12,7 +12,8 @@ CloudFormation provisions the ALB security group, load balancer, listener, and t
 | --- | --- |
 | `modules/network-skeleton/template.yaml` | VPC, subnets, internet gateway, routes, one NAT gateway/EIP |
 | `modules/bastion/template.yaml` | Optional bastion security group, EC2 instance, and EIP |
-| `modules/eks/template.yaml` | EKS cluster, node groups, IAM roles, node/ALB security groups, ALB, and controller identity |
+| `modules/eks/template.yaml` | EKS cluster, multi-AZ node groups, IAM roles, node security group, add-ons, and controller identity |
+| `modules/spendsmart/template.yaml` | Optional private deployment host, EKS deployment access, Helm releases, and frontend Ingress |
 | `modules/s3/template.yaml` | Data and Athena-results bucket |
 | `modules/glue/template.yaml` | Glue database and service role |
 | `modules/athena/template.yaml` | Athena workgroup |
@@ -26,7 +27,6 @@ CloudFormation provisions the ALB security group, load balancer, listener, and t
 flowchart TB
   Internet((Internet)) --> IGW[Internet Gateway]
   IGW --> Pub[Two public subnets]
-  Pub --> StackALB[CloudFormation ALB]
   Pub --> NAT[NAT Gateway]
   NAT --> Priv[Two private subnets]
   Priv --> EKS[EKS cluster\nprivate API endpoint]
@@ -34,7 +34,7 @@ flowchart TB
   EKS --> NG2[Managed node group 2]
   NG1 --> Pod[SpendSmart pods]
   NG2 --> Pod
-  Pod -->|Ingress targets| IngressALB[Controller-managed ALB]
+  Pod -->|NodePort service| IngressALB[Controller-managed ALB and target group]
   EKS --> PI[Pod Identity Agent]
   PI --> LBC[AWS Load Balancer Controller\ninstalled with Helm]
   LBC -->|AWS API via Pod Identity| IngressALB
@@ -50,22 +50,22 @@ flowchart TB
 
 - Network: VPC, two public and two private subnets, internet gateway, public routing, one NAT gateway/EIP, and shared private routing.
 - Access: optional bastion security group, EC2 instance, and optional Elastic IP.
-- EKS: cluster, cluster/node roles, launch template, worker security group, two managed node groups, and the `vpc-cni`, `kube-proxy`, `coredns`, and `eks-pod-identity-agent` add-ons.
-- Load balancing: ALB security group, application load balancer, listener, and target group.
+- EKS: cluster, cluster/node roles, worker security group, two managed node groups eligible in both private subnets, and the `vpc-cni`, `kube-proxy`, `coredns`, and `eks-pod-identity-agent` add-ons.
 - Controller identity: IAM role with the AWS Load Balancer Controller permissions policy and an EKS Pod Identity association for the configured Kubernetes namespace/service account.
+- Optional application install: private Helm deployment host and an EKS access entry used to install the controller, application chart, and Ingress.
 - Data and analytics: retained S3 bucket, Glue database/role, Athena workgroup, and analytics IAM role/managed policy.
 
 ### Helm/Kubernetes-managed resources
 
-- AWS Load Balancer Controller Deployment and service account. Install the chart version matching `AlbControllerVersion`; configure the chart to use `AlbControllerNamespace` and `AlbControllerServiceAccountName`. Pod Identity supplies AWS credentials; do not put access keys in chart values or Kubernetes Secrets.
-- SpendSmart Deployment, Service, and Ingress from the application chart.
-- Kubernetes Ingress and application target registration, according to the installed controller configuration.
+- AWS Load Balancer Controller Deployment and service account. Pod Identity supplies AWS credentials; do not put AWS access keys in chart values or Kubernetes Secrets.
+- SpendSmart Deployments, Services, and refresh CronJob from the application chart, plus a frontend Ingress applied by the deployment module.
+- The Ingress uses `target-type: instance`; the frontend Service is changed to NodePort, and the controller registers eligible EC2 worker instances in its managed target group.
 
-Use an Ingress with `ingressClassName: alb`. The `ip` target mode registers pod IPs (normally preferred with the Amazon VPC CNI); `instance` mode registers worker instances and requires the backend Service to expose a NodePort. Configure health-check path, listener ports, scheme, and certificate for the application.
+Application deployment is disabled by default. Before enabling it, create the `spendsmart` namespace and the chart's image-pull/application Secrets. The deployment role is cluster-admin scoped while the private host installs the controller's cluster-level RBAC and application resources.
 
 ## ALB Responsibilities
 
-CloudFormation creates the stack ALB, listener, target group, and ALB security group. The AWS Load Balancer Controller has separate ownership of ALBs requested by Kubernetes Ingress resources; it creates and reconciles those Ingress-managed resources and their targets. Do not assume the controller-managed Ingress ALB is the same resource as the stack ALB.
+The controller creates the ALB, listener, security groups, and target group from the Ingress. There is no separate CloudFormation-managed ALB with an unattached target group. The Ingress `ADDRESS` contains the application ALB DNS name after reconciliation.
 
 ## CloudFormation Outputs
 
@@ -90,13 +90,13 @@ CloudFormation outputs are strings. Values representing Terraform maps/lists are
 | `EksNodesSecurityGroupId` | Additional worker-node security group ID |
 | `EksNodeGroupNames` | JSON array of managed node-group names |
 | `EksConfigureKubectl` | `aws eks update-kubeconfig` command |
-| `AlbDnsName` | DNS name of the CloudFormation-managed ALB |
-| `AlbTargetGroupArn` | ARN of the CloudFormation-managed target group |
-| `AlbSecurityGroupId` | Security group ID attached to the CloudFormation-managed ALB |
 | `AlbControllerRoleArn` | Controller IAM role ARN for Pod Identity |
 | `AlbControllerNamespace` | Controller namespace configured for the association |
 | `AlbControllerServiceAccountName` | Controller service-account name configured for the association |
 | `AlbControllerVersion` | Controller release to align with the IAM policy and Helm chart |
+| `SpendSmartDeploymentHostId` | Private deployment host instance ID, when `DeploySpendSmart` is true |
+| `SpendSmartNamespace` | Application namespace, when deployment is enabled |
+| `SpendSmartIngressName` | Application Ingress name, when deployment is enabled |
 | `BucketName` | S3 bucket name |
 | `DataLocation` | S3 URI for the data prefix |
 | `AthenaOutputLocation` | S3 URI for Athena query results |
@@ -108,12 +108,11 @@ CloudFormation outputs are strings. Values representing Terraform maps/lists are
 | `AnalyticsIamPolicyName` | Analytics IAM managed policy name |
 | `AnalyticsIamPolicyArn` | Analytics IAM managed policy ARN |
 
-The stack-created ALB is independent of any additional ALB the controller may provision for an Ingress. The stack exports `AlbDnsName`, `AlbTargetGroupArn`, and `AlbSecurityGroupId` for its ALB resources.
+The three `SpendSmart*` outputs are conditional on `DeploySpendSmart=true`. Retrieve the provisioned ALB address from `kubectl get ingress spendsmart -n spendsmart`.
 
 ## Resource Lifecycle
 
-1. Deploy the CloudFormation stack. The Pod Identity association and agent are created with the EKS foundation.
-2. Configure kubectl from `EksConfigureKubectl` on a host with network access to the private EKS API endpoint.
-3. Install the AWS Load Balancer Controller chart using the stack's controller namespace, service-account name, role ARN, and version outputs.
-4. Install the SpendSmart chart with an Ingress configured for the controller.
-5. Verify the controller Deployment, Ingress address, and target health. Delete the Ingress/application before removing the controller or EKS stack so controller-managed load balancers can be cleaned up.
+1. Deploy the infrastructure with `DeploySpendSmart=false`.
+2. Configure kubectl from `EksConfigureKubectl`; create the `spendsmart` namespace and required Secrets.
+3. Update the stack with `DeploySpendSmart=true`. The module installs the controller and chart, then applies the Ingress.
+4. Verify `kubectl get ingress spendsmart -n spendsmart` and target health. Deleting the stack removes the application module and EKS resources; the retained S3 bucket remains.
