@@ -71,11 +71,32 @@ aws cloudformation describe-stack-events \
 After setting up the namespace Secrets, package again and enable application installation:
 
 ```sh
-aws cloudformation package --template-file main.yml --s3-bucket <TEMPLATE_BUCKET> \
-  --output-template-file packaged.yml --region us-east-1
-aws cloudformation deploy --template-file packaged.yml --stack-name spendsmart-dev \
-  --parameter-overrides DeploySpendSmart=true \
-  --capabilities CAPABILITY_NAMED_IAM --region us-east-1
+aws cloudformation package --template-file main.yml --s3-bucket spendsmart-cfn-packages-047078339928-us-east-1 --output-template-file packaged.yml --region us-east-1 && aws cloudformation validate-template --template-body file://packaged.yml --region us-east-1
+
+aws cloudformation deploy \
+  --template-file packaged.yml \
+  --stack-name spendsmart-dev \
+  --parameter-overrides \
+    Ec2KeyName=observabilty.pem \
+    S3BucketName=spendsmart-athena-results-047078339928-us-east-1-20261001 \
+    BastionSshCidrs="0.0.0.0/0,103.87.45.139/32" \
+    DeploySpendSmart=true \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --region us-east-1
 ```
 
-Use the same region for the stack, template bucket, EC2 key pair, and AMI lookup. Change `BastionSshCidr` to a trusted CIDR and use a globally unique `S3BucketName`. The defaults create a NAT gateway and a private-only EKS endpoint; the NAT gateway, EKS control plane, EC2 nodes, optional bastion, optional deployment host, controller-managed ALB, and data transfer incur charges. The S3 bucket is retained when the stack is deleted.
+Use the same region for the stack, template bucket, EC2 key pair, and AMI lookup. `BastionSshCidrs` is a comma-separated list. It currently includes `0.0.0.0/0`, which permits SSH from any IPv4 address and makes the `103.87.45.139/32` entry redundant; do not use this setting for production. Use a globally unique `S3BucketName`. The defaults create a NAT gateway and a private-only EKS endpoint; the NAT gateway, EKS control plane, EC2 nodes, optional bastion, optional deployment host, controller-managed ALB, and data transfer incur charges. CloudFormation deletes the S3 bucket during rollback or stack deletion; deletion can fail if the bucket contains objects or object versions.
+
+I’ll submit a Service Quotas increase request for the `us-east-1` EC2 On-Demand Standard vCPU quota, from 8 to 25. AWS approval may be required, so I’ll check the request status after submitting it.
+
+Ran terminal command:  aws service-quotas request-service-quota-increase --service-code ec2 --quota-code L-1216C47A --desired-value 25 --region us-east-1 --output json
+
+AWS accepted the request for processing as `PENDING` with a desired limit of 25. I’m checking the request record once so I can report its current status and identifier accurately.
+
+Ran terminal command:  aws service-quotas get-requested-service-quota-change --request-id 685efca09e8046dbb2f5472d04b09518kM1gTtNm --region us-east-1 --query 'RequestedQuota.{Id:Id,Quota:QuotaName,DesiredValue:DesiredValue,Status:Status,CaseId:CaseId,Created:Created}' --output table
+
+I submitted the EC2 On-Demand Standard vCPU quota increase request for `us-east-1`, from 8 to 25 vCPUs. AWS shows it as **PENDING**, so the quota has not increased yet.
+
+Request ID: `685efca09e8046dbb2f5472d04b09518kM1gTtNm`
+
+aws s3api create-bucket --bucket spendsmart-cfn-packages-047078339928-us-east-1 --region us-east-1 --object-ownership BucketOwnerEnforced && aws s3api put-public-access-block --bucket spendsmart-cfn-packages-047078339928-us-east-1 --region us-east-1 --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true && aws s3api put-bucket-encryption --bucket spendsmart-cfn-packages-047078339928-us-east-1 --region us-east-1 --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}' && aws s3api put-bucket-versioning --bucket spendsmart-cfn-packages-047078339928-us-east-1 --region us-east-1 --versioning-configuration Status=Enabled

@@ -40,10 +40,10 @@ Parameters:
     Description: Existing EC2 key pair in the deployment region.
     
 
-  BastionSshCidr:
-    Type: String
-    Default: 0.0.0.0/0
-    Description: Restrict this to your trusted public IP/CIDR before deployment.
+  BastionSshCidrs:
+    Type: CommaDelimitedList
+    Default: '0.0.0.0/0,103.87.45.139/32'
+    Description: CIDR allowlist for SSH to the bastion. Including 0.0.0.0/0 permits SSH from any IPv4 address.
 
   TcpProtocol:
     Type: String
@@ -129,7 +129,12 @@ Resources:
         - IpProtocol: !Ref TcpProtocol
           FromPort: !Ref BastionSshPort
           ToPort: !Ref BastionSshPort
-          CidrIp: !Ref BastionSshCidr
+          CidrIp: !Select [0, !Ref BastionSshCidrs]
+          Description: !Ref EksNodesSshIngressDescription
+        - IpProtocol: !Ref TcpProtocol
+          FromPort: !Ref BastionSshPort
+          ToPort: !Ref BastionSshPort
+          CidrIp: !Select [1, !Ref BastionSshCidrs]
           Description: !Ref EksNodesSshIngressDescription
       SecurityGroupEgress:
         - IpProtocol: !Ref AllTrafficProtocol

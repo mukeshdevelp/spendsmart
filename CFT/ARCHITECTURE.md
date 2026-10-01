@@ -53,7 +53,7 @@ flowchart TB
 - EKS: cluster, cluster/node roles, worker security group, two managed node groups eligible in both private subnets, and the `vpc-cni`, `kube-proxy`, `coredns`, and `eks-pod-identity-agent` add-ons.
 - Controller identity: IAM role with the AWS Load Balancer Controller permissions policy and an EKS Pod Identity association for the configured Kubernetes namespace/service account.
 - Optional application install: private Helm deployment host and an EKS access entry used to install the controller, application chart, and Ingress.
-- Data and analytics: retained S3 bucket, Glue database/role, Athena workgroup, and analytics IAM role/managed policy.
+- Data and analytics: S3 bucket deleted during rollback/stack deletion when empty, Glue database/role, Athena workgroup, and analytics IAM role/managed policy.
 
 ### Helm/Kubernetes-managed resources
 
@@ -115,4 +115,4 @@ The three `SpendSmart*` outputs are conditional on `DeploySpendSmart=true`. Retr
 1. Deploy the infrastructure with `DeploySpendSmart=false`.
 2. Configure kubectl from `EksConfigureKubectl`; create the `spendsmart` namespace and required Secrets.
 3. Update the stack with `DeploySpendSmart=true`. The module installs the controller and chart, then applies the Ingress.
-4. Verify `kubectl get ingress spendsmart -n spendsmart` and target health. Deleting the stack removes the application module and EKS resources; the retained S3 bucket remains.
+4. Verify `kubectl get ingress spendsmart -n spendsmart` and target health. Deleting the stack removes the application module and EKS resources and deletes the S3 bucket if it is empty. Empty object versions first or bucket deletion can fail.

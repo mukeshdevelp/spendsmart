@@ -1,11 +1,11 @@
 [
   {
     "ParameterKey": "Ec2KeyName",
-    "ParameterValue": "mukesh"
+    "ParameterValue": "observabilty.pem"
   },
   {
-    "ParameterKey": "BastionSshCidr",
-    "ParameterValue": "0.0.0.0/0"
+    "ParameterKey": "BastionSshCidrs",
+    "ParameterValue": "0.0.0.0/0,103.87.45.139/32"
   },
   {
     "ParameterKey": "S3BucketName",
