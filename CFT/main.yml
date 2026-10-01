@@ -112,15 +112,15 @@ Parameters:
 
   EksNodeDesiredSize:
     Type: Number
-    Default: 2
+    Default: 1
 
   EksNodeMinSize:
     Type: Number
-    Default: 2
+    Default: 1
 
   EksNodeMaxSize:
     Type: Number
-    Default: 3
+    Default: 1
 
   EksNodeDiskSize:
     Type: Number

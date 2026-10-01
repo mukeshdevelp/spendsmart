@@ -124,7 +124,7 @@ Parameters:
 
   EksNodeMaxSize:
     Type: Number
-    Default: 3
+    Default: 1
 
   EksNodeDiskSize:
     Type: Number
@@ -550,11 +550,11 @@ Parameters:
     Description: Container port the pods listen on.
   EksNodeDesiredSize:
     Type: Number
-    Default: 2
+    Default: 1
 
   EksNodeMinSize:
     Type: Number
-    Default: 2
+    Default: 1
     
   AlbHealthCheckPath:
     Type: String

@@ -97,13 +97,13 @@ Parameters:
     Default: c7i-flex.large
   EksNodeDesiredSize:
     Type: Number
-    Default: 2
+    Default: 1
   EksNodeMinSize:
     Type: Number
-    Default: 2
+    Default: 1
   EksNodeMaxSize:
     Type: Number
-    Default: 3
+    Default: 1
   EksNodeDiskSize:
     Type: Number
     Default: 48
@@ -782,7 +782,7 @@ Resources:
   Eks:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://s3.amazonaws.com/spendsmart-cfn-packages-047078339928-us-east-1/5529c4e7e2c290a88463c84ebb93b9ee.template
+      TemplateURL: https://s3.amazonaws.com/spendsmart-cfn-packages-047078339928-us-east-1/1b9cfc06f7c8c4b3b0c3c971d0b024ae.template
       Parameters:
         ProjectName:
           Ref: ProjectName
@@ -912,7 +912,7 @@ Resources:
     Condition: DeploySpendSmartCondition
     DependsOn: Eks
     Properties:
-      TemplateURL: https://s3.amazonaws.com/spendsmart-cfn-packages-047078339928-us-east-1/1d0018e6ae7e6d02cb55147649560db4.template
+      TemplateURL: https://s3.amazonaws.com/spendsmart-cfn-packages-047078339928-us-east-1/85236d56bafde2221004ad110de1dfb7.template
       Parameters:
         ClusterName:
           Fn::GetAtt:

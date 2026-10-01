@@ -58,7 +58,7 @@ Parameters:
 
   EksNodeMaxSize:
     Type: Number
-    Default: 2
+    Default: 1
 
   EksNodeDiskSize:
     Type: Number
@@ -698,6 +698,3 @@ Outputs:
   AlbControllerVersion:
     Value: !Ref AlbControllerVersion
 
-  # EksNodeGroupNames:
-  #   Description: Auto Scaling group name (JSON array for compatibility)
-  #   Value: !Sub '["${EksNodeAutoScalingGroup}"]'

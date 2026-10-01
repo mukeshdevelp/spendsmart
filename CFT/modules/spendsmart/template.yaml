@@ -121,7 +121,8 @@ Resources:
     Properties:
       ImageId: !Ref DeploymentAmi
       InstanceType: !Ref DeploymentInstanceType
-      IamInstanceProfile: !Ref DeploymentInstanceProfile
+      IamInstanceProfile:
+        Arn: !GetAtt DeploymentInstanceProfile.Arn
       SubnetId: !Ref PrivateSubnetId
       SecurityGroupIds:
         - !Ref DeploymentSecurityGroup
@@ -163,10 +164,16 @@ Resources:
             aws s3 cp '${ValuesS3Uri}' /tmp/spendsmart-values.yaml
             values_args+=(--values /tmp/spendsmart-values.yaml)
           fi
-          helm upgrade --install spendsmart /opt/helm-charts/charts/spendsmart \
-            --namespace ${Namespace} --create-namespace \
-            --set-string frontend.service.type=NodePort \
-            "${!values_args[@]}"
+          if [ -n '${ValuesS3Uri}' ]; then
+            helm upgrade --install spendsmart /opt/helm-charts/charts/spendsmart \
+              --namespace ${Namespace} --create-namespace \
+              --set-string frontend.service.type=NodePort \
+              --values /tmp/spendsmart-values.yaml
+          else
+            helm upgrade --install spendsmart /opt/helm-charts/charts/spendsmart \
+              --namespace ${Namespace} --create-namespace \
+              --set-string frontend.service.type=NodePort
+          fi
 
           kubectl apply -f - <<'INGRESS'
           apiVersion: networking.k8s.io/v1

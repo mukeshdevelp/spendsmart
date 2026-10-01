@@ -80,6 +80,9 @@ aws cloudformation deploy \
     Ec2KeyName=observabilty.pem \
     S3BucketName=spendsmart-athena-results-047078339928-us-east-1-20261001 \
     BastionSshCidrs="0.0.0.0/0,103.87.45.139/32" \
+    EksNodeDesiredSize=1 \
+    EksNodeMinSize=1 \
+    EksNodeMaxSize=1 \
     DeploySpendSmart=true \
   --capabilities CAPABILITY_NAMED_IAM \
   --region us-east-1
