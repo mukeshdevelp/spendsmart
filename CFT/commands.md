@@ -73,16 +73,6 @@ aws cloudformation wait stack-create-complete \
 
 # packaged commands
 
-aws cloudformation package \
-  --template-file CFT/main.yml \
-  --s3-bucket spendsmart-cfn-packages \
-  --output-template-file packaged-template.yaml \
-  --region us-east-1
+aws cloudformation package   --template-file main.yml   --s3-bucket spendsmart-cfn-packages   --output-template-file ../packaged-template.yaml   --region us-east-1
 
-  
-aws cloudformation deploy \
-  --template-file /home/mukesh/Desktop/spendsmart/packaged-template.yaml \
-  --stack-name spendsmart-dev \
-  --parameter-overrides Ec2KeyName=mukesh \
-  --capabilities CAPABILITY_NAMED_IAM \
-  --region us-east-1
+ aws cloudformation deploy   --template-file /home/mukesh/Desktop/spendsmart/packaged-template.yaml   --stack-name spendsmart-dev   --parameter-overrides Ec2KeyName=mukesh   --capabilities CAPABILITY_NAMED_IAM   --region us-east-1

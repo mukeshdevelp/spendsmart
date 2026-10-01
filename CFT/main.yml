@@ -734,8 +734,8 @@ Resources:
         PublicSubnet1Id: !GetAtt Network.Outputs.PublicSubnet1Id
         PublicSubnet2Id: !GetAtt Network.Outputs.PublicSubnet2Id
         BastionSecurityGroupId: !If [CreateBastion, !GetAtt Bastion.Outputs.BastionSecurityGroupId, '']
-        EksNodeAmiId: !Ref EksNodeAmiSsmParameter
-        EksServiceCidr: !Ref EksServiceCidr
+        # EksNodeAmiId: !Ref EksNodeAmiSsmParameter
+        # EksServiceCidr: !Ref EksServiceCidr
 
   S3:
     Type: AWS::CloudFormation::Stack
