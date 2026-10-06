@@ -315,6 +315,22 @@ Outputs:
         Zone2: !If [UseDefaultAz2, !Select [1, !GetAZs ''], !Ref AvailabilityZone2]
         Subnet1: !Ref PrivateSubnet1
         Subnet2: !Ref PrivateSubnet2
+  PublicSubnet1Id:
+    Description: Public subnet 1 ID
+    Value: !Ref PublicSubnet1
+
+  PublicSubnet2Id:
+    Description: Public subnet 2 ID
+    Value: !Ref PublicSubnet2
+
+  PrivateSubnet1Id:
+    Description: Private subnet 1 ID
+    Value: !Ref PrivateSubnet1
+
+  PrivateSubnet2Id:
+    Description: Private subnet 2 ID
+    Value: !Ref PrivateSubnet2
+    
   VpcCidr:
     Description: Terraform output vpc_cidr
     Value: !GetAtt Vpc.CidrBlock

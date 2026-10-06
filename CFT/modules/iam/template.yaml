@@ -16,6 +16,7 @@ Parameters:
   AnalyticsRoleNameSuffix:
     Type: String
     Default: -analytics-role
+    
   AnalyticsPolicyNameSuffix:
     Type: String
     Default: -analytics-policy

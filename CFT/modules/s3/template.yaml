@@ -1,6 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: SpendSmart s3 nested stack
 Parameters:
+  # project nmae
   ProjectName:
     Type: String
     Default: spendsmart
@@ -17,7 +18,7 @@ Parameters:
   DataPrefix:
     Type: String
     Default: data
-
+  
   AthenaResultsPrefix:
     Type: String
     Default: athena-results

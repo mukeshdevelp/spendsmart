@@ -66,9 +66,22 @@ Parameters:
   BastionRootDeviceName:
     Type: String
     Default: /dev/xvda
-  Ec2KeyName:
-    Type: AWS::EC2::KeyPair::KeyName
-    Description: Existing EC2 key pair in the deployment region.
+  Ec2KeyPairMode:
+    Type: String
+    AllowedValues:
+    - Existing
+    - CreateNew
+    Default: Existing
+    Description: Use an existing regional key pair or create a stack-owned key pair
+      for the bastion.
+  ExistingEc2KeyName:
+    Type: String
+    Default: mukesh
+    Description: Existing key pair name; used only when Ec2KeyPairMode is Existing.
+  NewEc2KeyPairName:
+    Type: String
+    Default: spendsmart-dev-generated
+    Description: Unique key pair name; used only when Ec2KeyPairMode is CreateNew.
   BastionSshCidrs:
     Type: CommaDelimitedList
     Default: 0.0.0.0/0,103.87.45.139/32
@@ -77,6 +90,39 @@ Parameters:
   EksClusterName:
     Type: String
     Default: spendsmart
+  EksClusterMode:
+    Type: String
+    AllowedValues:
+    - CreateNew
+    - UseExisting
+    Default: CreateNew
+  ExistingEksClusterName:
+    Type: String
+    Default: ''
+    Description: Existing cluster name; required when EksClusterMode is UseExisting.
+  ExistingEksVpcId:
+    Type: String
+    Default: ''
+    Description: VPC ID containing the existing cluster and the private deployment
+      subnet.
+  ExistingEksPrivateSubnetId:
+    Type: String
+    Default: ''
+    Description: Private subnet ID in the existing cluster VPC where the deployment
+      host can reach the cluster API.
+  ExistingEksClusterSecurityGroupId:
+    Type: String
+    Default: ''
+    Description: Existing EKS cluster security group ID for HTTPS access from the
+      deployment host.
+  ExistingEksLoadBalancerControllerReady:
+    Type: String
+    AllowedValues:
+    - 'true'
+    - 'false'
+    Default: 'false'
+    Description: Confirm the existing cluster already has AWS Load Balancer Controller
+      and AWS permissions.
   EksClusterVersion:
     Type: String
     Default: '1.36'
@@ -246,6 +292,21 @@ Parameters:
     - OVERWRITE
     - PRESERVE
     Default: OVERWRITE
+  AlbName:
+    Type: String
+    Default: spendsmart-dev-alb
+  AlbTargetGroupName:
+    Type: String
+    Default: spendsmart-dev-tg
+  AlbListenerPort:
+    Type: Number
+    Default: 80
+  AlbTargetPort:
+    Type: Number
+    Default: 30080
+  AlbHealthCheckPath:
+    Type: String
+    Default: /healthz
   PublicSubnetTierTag:
     Type: String
     Default: public
@@ -508,14 +569,14 @@ Parameters:
     Type: String
     Default: 172.20.0.0/16
     Description: Cluster service CIDR (EKS default for a 10.x VPC).
-  DeploySpendSmart:
+  SpendSmartWorkloadMode:
     Type: String
     AllowedValues:
-    - 'true'
-    - 'false'
-    Default: 'false'
-    Description: Install the SpendSmart Helm chart after required Kubernetes secrets
-      have been created.
+    - InstallNew
+    - LeaveExisting
+    Default: LeaveExisting
+    Description: Install the SpendSmart Helm release or leave existing app workloads
+      untouched.
   SpendSmartValuesS3Uri:
     Type: String
     Default: ''
@@ -536,7 +597,71 @@ Parameters:
     Type: String
     Default: 1.11.0
     Description: AWS Load Balancer Controller Helm chart version matching AlbControllerVersion.
+Rules:
+  ExistingEksInputsRequired:
+    RuleCondition:
+      Fn::Equals:
+      - Ref: EksClusterMode
+      - UseExisting
+    Assertions:
+    - Assert:
+        Fn::Not:
+        - Fn::Equals:
+          - Ref: ExistingEksClusterName
+          - ''
+      AssertDescription: ExistingEksClusterName is required in UseExisting mode.
+    - Assert:
+        Fn::Not:
+        - Fn::Equals:
+          - Ref: ExistingEksVpcId
+          - ''
+      AssertDescription: ExistingEksVpcId is required in UseExisting mode.
+    - Assert:
+        Fn::Not:
+        - Fn::Equals:
+          - Ref: ExistingEksPrivateSubnetId
+          - ''
+      AssertDescription: ExistingEksPrivateSubnetId is required in UseExisting mode.
+    - Assert:
+        Fn::Not:
+        - Fn::Equals:
+          - Ref: ExistingEksClusterSecurityGroupId
+          - ''
+      AssertDescription: ExistingEksClusterSecurityGroupId is required in UseExisting
+        mode.
+  ExistingEksControllerRequired:
+    RuleCondition:
+      Fn::And:
+      - Fn::Equals:
+        - Ref: EksClusterMode
+        - UseExisting
+      - Fn::Equals:
+        - Ref: SpendSmartWorkloadMode
+        - InstallNew
+    Assertions:
+    - Assert:
+        Fn::Equals:
+        - Ref: ExistingEksLoadBalancerControllerReady
+        - 'true'
+      AssertDescription: Install AWS Load Balancer Controller with AWS permissions
+        before installing SpendSmart into an existing cluster.
 Conditions:
+  CreateNewEc2KeyPair:
+    Fn::Equals:
+    - Ref: Ec2KeyPairMode
+    - CreateNew
+  CreateNewEksCluster:
+    Fn::Equals:
+    - Ref: EksClusterMode
+    - CreateNew
+  UseExistingEksCluster:
+    Fn::Equals:
+    - Ref: EksClusterMode
+    - UseExisting
+  InstallSpendSmart:
+    Fn::Equals:
+    - Ref: SpendSmartWorkloadMode
+    - InstallNew
   UseDefaultAz1:
     Fn::Equals:
     - Ref: AvailabilityZone1
@@ -558,9 +683,14 @@ Conditions:
     - Ref: EnableNatGateway
     - 'true'
   CreateBastion:
-    Fn::Equals:
-    - Ref: BastionEnabled
-    - 'true'
+    Fn::And:
+    - Condition: CreateNewEksCluster
+    - Fn::Equals:
+      - Ref: BastionEnabled
+      - 'true'
+    - Fn::Equals:
+      - Ref: BastionEnabled
+      - 'true'
   CreateBastionEip:
     Fn::And:
     - Condition: CreateBastion
@@ -648,15 +778,27 @@ Conditions:
     Fn::Equals:
     - Ref: AthenaPublishCloudWatchMetrics
     - 'true'
-  DeploySpendSmartCondition:
-    Fn::Equals:
-    - Ref: DeploySpendSmart
-    - 'true'
 Resources:
+  GeneratedEc2KeyPair:
+    Type: AWS::EC2::KeyPair
+    Condition: CreateNewEc2KeyPair
+    Properties:
+      KeyName:
+        Ref: NewEc2KeyPairName
+      KeyFormat: pem
+      KeyType: rsa
+      Tags:
+      - Key: Project
+        Value:
+          Ref: ProjectName
+      - Key: Environment
+        Value:
+          Ref: Environment
   Network:
     Type: AWS::CloudFormation::Stack
+    Condition: CreateNewEksCluster
     Properties:
-      TemplateURL: https://s3.amazonaws.com/spendsmart-cfn-packages-047078339928-us-east-1/ae7362039e196c989f40889c4c11122e.template
+      TemplateURL: https://s3.amazonaws.com/spendsmart-cfn-packages/ddd4abb227eb668e8cc718b488cebf73.template
       Parameters:
         ProjectName:
           Ref: ProjectName
@@ -716,8 +858,9 @@ Resources:
           Ref: ClusterSubnetTagValue
   Bastion:
     Type: AWS::CloudFormation::Stack
+    Condition: CreateBastion
     Properties:
-      TemplateURL: https://s3.amazonaws.com/spendsmart-cfn-packages-047078339928-us-east-1/7741af201cb952738bcaba1f09dcf277.template
+      TemplateURL: https://s3.amazonaws.com/spendsmart-cfn-packages/7741af201cb952738bcaba1f09dcf277.template
       Parameters:
         NamePrefix:
           Ref: NamePrefix
@@ -736,7 +879,10 @@ Resources:
         BastionRootDeviceName:
           Ref: BastionRootDeviceName
         Ec2KeyName:
-          Ref: Ec2KeyName
+          Fn::If:
+          - CreateNewEc2KeyPair
+          - Ref: GeneratedEc2KeyPair
+          - Ref: ExistingEc2KeyName
         BastionSshCidrs:
           Fn::Join:
           - ','
@@ -781,8 +927,11 @@ Resources:
           - Outputs.PublicSubnet1Id
   Eks:
     Type: AWS::CloudFormation::Stack
+    Condition: CreateNewEksCluster
+    DependsOn:
+    - Network
     Properties:
-      TemplateURL: https://s3.amazonaws.com/spendsmart-cfn-packages-047078339928-us-east-1/1b9cfc06f7c8c4b3b0c3c971d0b024ae.template
+      TemplateURL: https://s3.amazonaws.com/spendsmart-cfn-packages/2fc1d7e045fa0418afea4662ff6ed071.template
       Parameters:
         ProjectName:
           Ref: ProjectName
@@ -798,8 +947,6 @@ Resources:
           Ref: AvailabilityZone2
         BastionEnabled:
           Ref: BastionEnabled
-        Ec2KeyName:
-          Ref: Ec2KeyName
         EksClusterName:
           Ref: EksClusterName
         EksClusterVersion:
@@ -907,25 +1054,104 @@ Resources:
             - Bastion
             - Outputs.BastionSecurityGroupId
           - ''
-  SpendSmart:
+  Alb:
     Type: AWS::CloudFormation::Stack
-    Condition: DeploySpendSmartCondition
-    DependsOn: Eks
+    Condition: CreateNewEksCluster
+    DependsOn:
+    - Network
+    - Eks
     Properties:
-      TemplateURL: https://s3.amazonaws.com/spendsmart-cfn-packages-047078339928-us-east-1/85236d56bafde2221004ad110de1dfb7.template
+      TemplateURL: https://s3.amazonaws.com/spendsmart-cfn-packages/5ab8a67ea44f94789f140573eb26e48e.template
       Parameters:
-        ClusterName:
-          Fn::GetAtt:
-          - Eks
-          - Outputs.EksClusterName
+        ProjectName:
+          Ref: ProjectName
+        NamePrefix:
+          Ref: NamePrefix
+        Environment:
+          Ref: Environment
         VpcId:
           Fn::GetAtt:
           - Network
           - Outputs.VpcId
-        PrivateSubnetId:
+        PublicSubnet1Id:
+          Fn::GetAtt:
+          - Network
+          - Outputs.PublicSubnet1Id
+        PublicSubnet2Id:
+          Fn::GetAtt:
+          - Network
+          - Outputs.PublicSubnet2Id
+        PrivateSubnet1Id:
           Fn::GetAtt:
           - Network
           - Outputs.PrivateSubnet1Id
+        PrivateSubnet2Id:
+          Fn::GetAtt:
+          - Network
+          - Outputs.PrivateSubnet2Id
+        EksClusterName:
+          Ref: EksClusterName
+        NodesSecurityGroupId:
+          Fn::GetAtt:
+          - Eks
+          - Outputs.EksClusterSecurityGroupId
+        AlbName:
+          Ref: AlbName
+        AlbTargetGroupName:
+          Ref: AlbTargetGroupName
+        AlbListenerPort:
+          Ref: AlbListenerPort
+        AlbTargetPort:
+          Ref: AlbTargetPort
+        AlbHealthCheckPath:
+          Ref: AlbHealthCheckPath
+        NodeGroup1Name:
+          Fn::GetAtt:
+          - Eks
+          - Outputs.EksNodeGroup1Name
+        NodeGroup2Name:
+          Fn::GetAtt:
+          - Eks
+          - Outputs.EksNodeGroup2Name
+  SpendSmart:
+    Type: AWS::CloudFormation::Stack
+    Condition: InstallSpendSmart
+    Properties:
+      TemplateURL: https://s3.amazonaws.com/spendsmart-cfn-packages/1f46785436985ee89cc9cf97641d1d0b.template
+      Parameters:
+        ClusterName:
+          Fn::If:
+          - UseExistingEksCluster
+          - Ref: ExistingEksClusterName
+          - Fn::GetAtt:
+            - Eks
+            - Outputs.EksClusterName
+        ClusterSecurityGroupId:
+          Fn::If:
+          - UseExistingEksCluster
+          - Ref: ExistingEksClusterSecurityGroupId
+          - Fn::GetAtt:
+            - Eks
+            - Outputs.EksClusterSecurityGroupId
+        VpcId:
+          Fn::If:
+          - UseExistingEksCluster
+          - Ref: ExistingEksVpcId
+          - Fn::GetAtt:
+            - Network
+            - Outputs.VpcId
+        PrivateSubnetId:
+          Fn::If:
+          - UseExistingEksCluster
+          - Ref: ExistingEksPrivateSubnetId
+          - Fn::GetAtt:
+            - Network
+            - Outputs.PrivateSubnet1Id
+        InstallAlbController:
+          Fn::If:
+          - CreateNewEksCluster
+          - 'true'
+          - 'false'
         ChartRepository: https://github.com/OT-CONTAINER-KIT/helm-charts.git
         ChartBranch: feature/spendsmart-helm-chart
         Namespace: spendsmart
@@ -942,7 +1168,7 @@ Resources:
   S3:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://s3.amazonaws.com/spendsmart-cfn-packages-047078339928-us-east-1/6d417da527733ebfd1b57c6938a49f5b.template
+      TemplateURL: https://s3.amazonaws.com/spendsmart-cfn-packages/6d417da527733ebfd1b57c6938a49f5b.template
       Parameters:
         ProjectName:
           Ref: ProjectName
@@ -981,7 +1207,7 @@ Resources:
   Glue:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://s3.amazonaws.com/spendsmart-cfn-packages-047078339928-us-east-1/41be3066644c4deabd91d2c65bc63a66.template
+      TemplateURL: https://s3.amazonaws.com/spendsmart-cfn-packages/41be3066644c4deabd91d2c65bc63a66.template
       Parameters:
         NamePrefix:
           Ref: NamePrefix
@@ -1006,7 +1232,7 @@ Resources:
   Athena:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://s3.amazonaws.com/spendsmart-cfn-packages-047078339928-us-east-1/0fee92b7b46f5bf7a9b34569d6a27413.template
+      TemplateURL: https://s3.amazonaws.com/spendsmart-cfn-packages/0fee92b7b46f5bf7a9b34569d6a27413.template
       Parameters:
         AthenaResultsPrefix:
           Ref: AthenaResultsPrefix
@@ -1029,7 +1255,7 @@ Resources:
   Iam:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://s3.amazonaws.com/spendsmart-cfn-packages-047078339928-us-east-1/570bbcf858afd164e8ba4125a9ac6e69.template
+      TemplateURL: https://s3.amazonaws.com/spendsmart-cfn-packages/570bbcf858afd164e8ba4125a9ac6e69.template
       Parameters:
         ProjectName:
           Ref: ProjectName
@@ -1046,37 +1272,69 @@ Resources:
         AnalyticsPolicyDescription:
           Ref: AnalyticsPolicyDescription
 Outputs:
-  VpcId:
+  Ec2KeyPairName:
+    Value:
+      Fn::If:
+      - CreateNewEc2KeyPair
+      - Ref: GeneratedEc2KeyPair
+      - Ref: ExistingEc2KeyName
+  GeneratedEc2KeyPairId:
+    Condition: CreateNewEc2KeyPair
     Value:
       Fn::GetAtt:
-      - Network
-      - Outputs.VpcId
+      - GeneratedEc2KeyPair
+      - KeyPairId
+  GeneratedEc2PrivateKeyParameter:
+    Condition: CreateNewEc2KeyPair
+    Value:
+      Fn::Sub:
+      - /ec2/keypair/${KeyPairId}
+      - KeyPairId:
+          Fn::GetAtt:
+          - GeneratedEc2KeyPair
+          - KeyPairId
+  VpcId:
+    Value:
+      Fn::If:
+      - UseExistingEksCluster
+      - Ref: ExistingEksVpcId
+      - Fn::GetAtt:
+        - Network
+        - Outputs.VpcId
   VpcCidr:
+    Condition: CreateNewEksCluster
     Value:
       Fn::GetAtt:
       - Network
       - Outputs.VpcCidr
   PublicSubnet1Id:
+    Condition: CreateNewEksCluster
     Value:
       Fn::GetAtt:
       - Network
       - Outputs.PublicSubnet1Id
   PublicSubnet2Id:
+    Condition: CreateNewEksCluster
     Value:
       Fn::GetAtt:
       - Network
       - Outputs.PublicSubnet2Id
   PrivateSubnet1Id:
     Value:
-      Fn::GetAtt:
-      - Network
-      - Outputs.PrivateSubnet1Id
+      Fn::If:
+      - UseExistingEksCluster
+      - Ref: ExistingEksPrivateSubnetId
+      - Fn::GetAtt:
+        - Network
+        - Outputs.PrivateSubnet1Id
   PrivateSubnet2Id:
+    Condition: CreateNewEksCluster
     Value:
       Fn::GetAtt:
       - Network
       - Outputs.PrivateSubnet2Id
   InternetGatewayId:
+    Condition: CreateNewEksCluster
     Value:
       Fn::GetAtt:
       - Network
@@ -1095,9 +1353,10 @@ Outputs:
       - Outputs.BastionSecurityGroupId
   SshKeyPairName:
     Value:
-      Fn::GetAtt:
-      - Bastion
-      - Outputs.SshKeyPairName
+      Fn::If:
+      - CreateNewEc2KeyPair
+      - Ref: GeneratedEc2KeyPair
+      - Ref: ExistingEc2KeyName
   BastionPublicIp:
     Condition: CreateBastion
     Value:
@@ -1106,73 +1365,92 @@ Outputs:
       - Outputs.BastionPublicIp
   EksClusterName:
     Value:
-      Fn::GetAtt:
-      - Eks
-      - Outputs.EksClusterName
+      Fn::If:
+      - UseExistingEksCluster
+      - Ref: ExistingEksClusterName
+      - Fn::GetAtt:
+        - Eks
+        - Outputs.EksClusterName
   EksClusterEndpoint:
+    Condition: CreateNewEksCluster
     Value:
       Fn::GetAtt:
       - Eks
       - Outputs.EksClusterEndpoint
   EksClusterArn:
     Value:
-      Fn::GetAtt:
-      - Eks
-      - Outputs.EksClusterArn
+      Fn::If:
+      - UseExistingEksCluster
+      - Fn::Sub: arn:${AWS::Partition}:eks:${AWS::Region}:${AWS::AccountId}:cluster/${ExistingEksClusterName}
+      - Fn::GetAtt:
+        - Eks
+        - Outputs.EksClusterArn
   EksClusterSecurityGroupId:
     Value:
-      Fn::GetAtt:
-      - Eks
-      - Outputs.EksClusterSecurityGroupId
+      Fn::If:
+      - UseExistingEksCluster
+      - Ref: ExistingEksClusterSecurityGroupId
+      - Fn::GetAtt:
+        - Eks
+        - Outputs.EksClusterSecurityGroupId
   EksNodesSecurityGroupId:
+    Condition: CreateNewEksCluster
     Value:
       Fn::GetAtt:
       - Eks
       - Outputs.EksNodesSecurityGroupId
   EksNodeGroupNames:
+    Condition: CreateNewEksCluster
     Value:
       Fn::GetAtt:
       - Eks
       - Outputs.EksNodeGroupNames
   EksConfigureKubectl:
     Value:
-      Fn::GetAtt:
-      - Eks
-      - Outputs.EksConfigureKubectl
+      Fn::If:
+      - UseExistingEksCluster
+      - Fn::Sub: aws eks update-kubeconfig --region ${AWS::Region} --name ${ExistingEksClusterName}
+      - Fn::GetAtt:
+        - Eks
+        - Outputs.EksConfigureKubectl
   AlbControllerRoleArn:
+    Condition: CreateNewEksCluster
     Value:
       Fn::GetAtt:
       - Eks
       - Outputs.AlbControllerRoleArn
   AlbControllerNamespace:
+    Condition: CreateNewEksCluster
     Value:
       Fn::GetAtt:
       - Eks
       - Outputs.AlbControllerNamespace
   AlbControllerServiceAccountName:
+    Condition: CreateNewEksCluster
     Value:
       Fn::GetAtt:
       - Eks
       - Outputs.AlbControllerServiceAccountName
   AlbControllerVersion:
+    Condition: CreateNewEksCluster
     Value:
       Fn::GetAtt:
       - Eks
       - Outputs.AlbControllerVersion
   SpendSmartDeploymentHostId:
-    Condition: DeploySpendSmartCondition
+    Condition: InstallSpendSmart
     Value:
       Fn::GetAtt:
       - SpendSmart
       - Outputs.DeploymentHostId
   SpendSmartNamespace:
-    Condition: DeploySpendSmartCondition
+    Condition: InstallSpendSmart
     Value:
       Fn::GetAtt:
       - SpendSmart
       - Outputs.Namespace
   SpendSmartIngressName:
-    Condition: DeploySpendSmartCondition
+    Condition: InstallSpendSmart
     Value:
       Fn::GetAtt:
       - SpendSmart
@@ -1228,6 +1506,7 @@ Outputs:
       - Iam
       - Outputs.AnalyticsIamPolicyArn
   PublicSubnetIds:
+    Condition: CreateNewEksCluster
     Value:
       Fn::Sub:
       - '{"${Zone1}":"${Subnet1}","${Zone2}":"${Subnet2}"}'
@@ -1254,6 +1533,7 @@ Outputs:
           - Network
           - Outputs.PublicSubnet2Id
   PrivateSubnetIds:
+    Condition: CreateNewEksCluster
     Value:
       Fn::Sub:
       - '{"${Zone1}":"${Subnet1}","${Zone2}":"${Subnet2}"}'
@@ -1280,6 +1560,7 @@ Outputs:
           - Network
           - Outputs.PrivateSubnet2Id
   NatGatewayIds:
+    Condition: CreateNewEksCluster
     Value:
       Fn::GetAtt:
       - Network

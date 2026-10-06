@@ -16,4 +16,5 @@ tfplan-*
 tfplan
 *-iam
 .venv
+spendsmart-helm-charts
 packaged-template.yaml

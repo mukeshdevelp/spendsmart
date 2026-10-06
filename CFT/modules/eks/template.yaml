@@ -1,157 +1,118 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: SpendSmart eks nested stack
+
 Parameters:
   ProjectName:
     Type: String
     Default: spendsmart
-
   NamePrefix:
     Type: String
     Default: spendsmart-dev
-
   Environment:
     Type: String
     Default: dev
-
   VpcCidr:
     Type: String
     Default: 10.0.0.0/16
-
   AvailabilityZone1:
     Type: String
     Default: ''
-    Description: Optional AZ override. Empty selects the first available AZ.
-
   AvailabilityZone2:
     Type: String
     Default: ''
-    Description: Optional AZ override. Empty selects the second available AZ.
-
   BastionEnabled:
     Type: String
     AllowedValues: ['true', 'false']
     Default: 'true'
-
-  Ec2KeyName:
-    Type: AWS::EC2::KeyPair::KeyName
-    Description: Existing EC2 key pair in the deployment region.
-
   EksClusterName:
     Type: String
     Default: spendsmart
-
   EksClusterVersion:
     Type: String
     Default: '1.36'
-
   EksNodeInstanceType:
     Type: String
     Default: c7i-flex.large
-
   EksNodeDesiredSize:
     Type: Number
     Default: 1
-
   EksNodeMinSize:
     Type: Number
     Default: 1
-
   EksNodeMaxSize:
     Type: Number
     Default: 1
-
   EksNodeDiskSize:
     Type: Number
     Default: 48
-
   EksNodeAmiType:
     Type: String
     Default: AL2023_x86_64_STANDARD
-
   EksNodeCapacityType:
     Type: String
     AllowedValues: [ON_DEMAND]
     Default: ON_DEMAND
-
   EksAddonResolveConflicts:
     Type: String
     AllowedValues: [NONE, OVERWRITE, PRESERVE]
     Default: OVERWRITE
-
   EksAuthenticationMode:
     Type: String
     AllowedValues: [API, API_AND_CONFIG_MAP, CONFIG_MAP]
     Default: API_AND_CONFIG_MAP
-
   EksBootstrapCreatorAdmin:
     Type: String
     AllowedValues: ['true', 'false']
     Default: 'true'
-
   EksClusterRoleNameSuffix:
     Type: String
     Default: -eks-cluster
-
   EksNodeRoleNameSuffix:
     Type: String
     Default: -eks-nodes
-
   EksClusterRoleAssumeService:
     Type: String
     Default: eks.amazonaws.com
-
   EksNodeRoleAssumeService:
     Type: String
     Default: ec2.amazonaws.com
-
   EksClusterPolicyArn:
     Type: String
     Default: arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
-
   EksVpcResourceControllerPolicyArn:
     Type: String
     Default: arn:aws:iam::aws:policy/AmazonEKSVPCResourceController
-
   EksNodeWorkerPolicyArn:
     Type: String
     Default: arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
-
   EksNodeCniPolicyArn:
     Type: String
     Default: arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
-
   EksNodeEcrPolicyArn:
     Type: String
     Default: arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
-
   EksNodeDiskType:
     Type: String
     Default: gp3
-
   EksNodeDeviceName:
     Type: String
     Default: /dev/xvda
-
   EksNodeVolumeEncrypted:
     Type: String
     AllowedValues: ['true', 'false']
     Default: 'true'
-
   EksNodeVolumeDeleteOnTermination:
     Type: String
     AllowedValues: ['true', 'false']
     Default: 'true'
-
   EksNodeMetadataEndpoint:
     Type: String
     AllowedValues: [enabled, disabled]
     Default: enabled
-
   EksNodeMetadataTokens:
     Type: String
     AllowedValues: [required, optional]
     Default: required
-    
   EksNodeMetadataHopLimit:
     Type: Number
     Default: 2
@@ -191,13 +152,6 @@ Parameters:
   EksClusterTagValue:
     Type: String
     Default: owned
-  # for autoscaling
-  # EksNodeAmiId:
-  #   Type: AWS::EC2::Image::Id
-  # EksServiceCidr:
-  #   Type: String
-  #   Default: 172.20.0.0/16
-
   AlbControllerNamespace:
     Type: String
     Default: kube-system
@@ -219,13 +173,12 @@ Parameters:
     Type: String
   BastionSecurityGroupId:
     Type: String
+    Default: ''
+
 Conditions:
-  UseDefaultAz1: !Equals [!Ref AvailabilityZone1, '']
-  EksNodeVolumeDeleteCondition: !Equals [!Ref EksNodeVolumeDeleteOnTermination, 'true']
-  EksNodeVolumeEncryptedCondition: !Equals [!Ref EksNodeVolumeEncrypted, 'true']
-  UseDefaultAz2: !Equals [!Ref AvailabilityZone2, '']
   EksBootstrapAdminEnabled: !Equals [!Ref EksBootstrapCreatorAdmin, 'true']
-  CreateBastion: !Equals [!Ref BastionEnabled, 'true']
+  HasBastion: !Not [!Equals [!Ref BastionSecurityGroupId, '']]
+
 Resources:
   EksClusterRole:
     Type: AWS::IAM::Role
@@ -241,6 +194,7 @@ Resources:
       ManagedPolicyArns:
         - !Ref EksClusterPolicyArn
         - !Ref EksVpcResourceControllerPolicyArn
+
   EksNodeRole:
     Type: AWS::IAM::Role
     Properties:
@@ -284,40 +238,48 @@ Resources:
       AddonName: eks-pod-identity-agent
       ResolveConflicts: !Ref EksAddonResolveConflicts
 
+  EksAddonVpcCni:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !Ref EksCluster
+      AddonName: !Ref EksAddonVpcCniName
+      ResolveConflicts: !Ref EksAddonResolveConflicts
+
+  EksAddonKubeProxy:
+    Type: AWS::EKS::Addon
+    Properties:
+      ClusterName: !Ref EksCluster
+      AddonName: !Ref EksAddonKubeProxyName
+      ResolveConflicts: !Ref EksAddonResolveConflicts
+
+  # CoreDNS is a Deployment: it can only become ACTIVE once nodes exist,
+  # so it is created AFTER the node groups.
+  EksAddonCoreDns:
+    Type: AWS::EKS::Addon
+    DependsOn: [EksNodeGroupAz1, EksNodeGroupAz2]
+    Properties:
+      ClusterName: !Ref EksCluster
+      AddonName: !Ref EksAddonCoreDnsName
+      ResolveConflicts: !Ref EksAddonResolveConflicts
+
   EksNodesSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: !Ref EksNodesSecurityGroupDescription
       VpcId: !Ref VpcId
-
       SecurityGroupIngress:
-
-        # EKS control plane -> kubelet
         - IpProtocol: tcp
           FromPort: 10250
           ToPort: 10250
           CidrIp: !Ref VpcCidr
-
           Description: EKS control plane to kubelet
-
-        # SSH from bastion
-        # SSH from bastion
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          SourceSecurityGroupId: !Ref BastionSecurityGroupId
-          Description: SSH from bastion
-
-
       SecurityGroupEgress:
         - IpProtocol: -1
           CidrIp: 0.0.0.0/0
           Description: Node egress
-
       Tags:
         - Key: Name
           Value: !Sub '${NamePrefix}${EksNodesSecurityGroupNameSuffix}'
-
         - Key: !Sub '${EksClusterTagKeyPrefix}${EksClusterName}'
           Value: !Ref EksClusterTagValue
 
@@ -329,120 +291,34 @@ Resources:
       SourceSecurityGroupId: !Ref EksNodesSecurityGroup
       Description: Node to node communication
 
-
-  EksNodeInstanceProfile:
-    Type: AWS::IAM::InstanceProfile
+  EksNodesSshIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasBastion
     Properties:
-      Roles:
-        - !Ref EksNodeRole
-
-  EksNodeAccessEntry:
-    Type: AWS::EKS::AccessEntry
-    Properties:
-      ClusterName: !Ref EksCluster
-      PrincipalArn: !GetAtt EksNodeRole.Arn
-      Type: EC2_LINUX
-
-  # EksNodeLaunchTemplate:
-  #   Type: AWS::EC2::LaunchTemplate
-  #   Properties:
-  #     LaunchTemplateName: !Sub '${NamePrefix}${EksNodeLaunchTemplateSuffix}'
-  #     LaunchTemplateData:
-  #       ImageId: !Ref EksNodeAmiId
-  #       InstanceType: !Ref EksNodeInstanceType
-  #       KeyName: !Ref Ec2KeyName
-  #       IamInstanceProfile:
-  #         Arn: !GetAtt EksNodeInstanceProfile.Arn
-  #       SecurityGroupIds:
-  #         - !Ref EksNodesSecurityGroup
-  #         - !GetAtt EksCluster.ClusterSecurityGroupId
-  #       BlockDeviceMappings:
-  #         - DeviceName: !Ref EksNodeDeviceName
-  #           Ebs:
-  #             VolumeSize: !Ref EksNodeDiskSize
-  #             VolumeType: !Ref EksNodeDiskType
-  #             Encrypted: !If [EksNodeVolumeEncryptedCondition, true, false]
-  #             DeleteOnTermination: !If [EksNodeVolumeDeleteCondition, true, false]
-  #       MetadataOptions:
-  #         HttpEndpoint: !Ref EksNodeMetadataEndpoint
-  #         HttpTokens: !Ref EksNodeMetadataTokens
-  #         HttpPutResponseHopLimit: !Ref EksNodeMetadataHopLimit
-  #       UserData:
-  #         Fn::Base64: !Sub |
-  #           MIME-Version: 1.0
-  #           Content-Type: multipart/mixed; boundary="BOUNDARY"
-
-  #           --BOUNDARY
-  #           Content-Type: application/node.eks.aws
-
-  #           ---
-  #           apiVersion: node.eks.aws/v1alpha1
-  #           kind: NodeConfig
-  #           spec:
-  #             cluster:
-  #               name: ${EksCluster}
-  #               apiServerEndpoint: ${EksCluster.Endpoint}
-  #               certificateAuthority: ${EksCluster.CertificateAuthorityData}
-  #               cidr: ${EksServiceCidr}
-  #             kubelet:
-  #               config:
-  #                 maxPods: 29
-  #               flags:
-  #                 - "--node-labels=spendsmart.io/pool=default"
-  #           --BOUNDARY--
-  # # auto scaling grp for target registration
-  # EksNodeAutoScalingGroup:
-  #   Type: AWS::AutoScaling::AutoScalingGroup
-  #   DependsOn:
-  #     - EksNodeAccessEntry
-  #     - EksAddonVpcCni
-  #     - EksAddonKubeProxy
-  #   Properties:
-  #     AutoScalingGroupName: !Sub '${NamePrefix}-eks-asg'
-  #     MinSize: !Ref EksNodeMinSize
-  #     MaxSize: !Ref EksNodeMaxSize
-  #     DesiredCapacity: !Ref EksNodeDesiredSize
-  #     VPCZoneIdentifier:
-  #       - !Ref PrivateSubnet1Id
-  #       - !Ref PrivateSubnet2Id
-  #     LaunchTemplate:
-  #       LaunchTemplateId: !Ref EksNodeLaunchTemplate
-  #       Version: !GetAtt EksNodeLaunchTemplate.LatestVersionNumber
-  #     TargetGroupARNs:
-  #       - !Ref AlbTargetGroup
-  #     HealthCheckType: EC2
-  #     Tags:
-  #       - Key: Name
-  #         Value: !Sub '${NamePrefix}${EksNodeInstanceNameSuffix}'
-  #         PropagateAtLaunch: true
-  #       - Key: !Sub '${EksClusterTagKeyPrefix}${EksClusterName}'
-  #         Value: owned
-  #         PropagateAtLaunch: true
-  #   UpdatePolicy:
-  #     AutoScalingRollingUpdate:
-  #       MaxBatchSize: 1
-  #       MinInstancesInService: 1
+      GroupId: !Ref EksNodesSecurityGroup
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+      SourceSecurityGroupId: !Ref BastionSecurityGroupId
+      Description: SSH from bastion
 
   EksNodeGroupAz1:
     Type: AWS::EKS::Nodegroup
     DependsOn:
       - EksAddonVpcCni
       - EksAddonKubeProxy
-      - EksAddonCoreDns
+      - EksAddonPodIdentityAgent
     Properties:
       ClusterName: !Ref EksCluster
       NodegroupName: !Sub '${EksNodeGroupNamePrefix}1'
       NodeRole: !GetAtt EksNodeRole.Arn
       Subnets:
         - !Ref PrivateSubnet1Id
-        - !Ref PrivateSubnet2Id
       InstanceTypes:
         - !Ref EksNodeInstanceType
       AmiType: !Ref EksNodeAmiType
       CapacityType: !Ref EksNodeCapacityType
-      # LaunchTemplate:
-      #   Id: !Ref EksNodeLaunchTemplate
-      #   Version: !GetAtt EksNodeLaunchTemplate.LatestVersionNumber
+      DiskSize: !Ref EksNodeDiskSize
       ScalingConfig:
         DesiredSize: !Ref EksNodeDesiredSize
         MinSize: !Ref EksNodeMinSize
@@ -451,29 +327,24 @@ Resources:
         MaxUnavailable: !Ref EksNodeUpdateMaxUnavailable
       Tags:
         Name: !Sub '${NamePrefix}${EksNodeGroupTagNameSuffix}1'
-      
-
 
   EksNodeGroupAz2:
     Type: AWS::EKS::Nodegroup
     DependsOn:
       - EksAddonVpcCni
       - EksAddonKubeProxy
-      - EksAddonCoreDns
+      - EksAddonPodIdentityAgent
     Properties:
       ClusterName: !Ref EksCluster
       NodegroupName: !Sub '${EksNodeGroupNamePrefix}2'
       NodeRole: !GetAtt EksNodeRole.Arn
       Subnets:
         - !Ref PrivateSubnet2Id
-        - !Ref PrivateSubnet1Id
       InstanceTypes:
         - !Ref EksNodeInstanceType
       AmiType: !Ref EksNodeAmiType
       CapacityType: !Ref EksNodeCapacityType
-      # LaunchTemplate:
-      #   Id: !Ref EksNodeLaunchTemplate
-      #   Version: !GetAtt EksNodeLaunchTemplate.LatestVersionNumber
+      DiskSize: !Ref EksNodeDiskSize
       ScalingConfig:
         DesiredSize: !Ref EksNodeDesiredSize
         MinSize: !Ref EksNodeMinSize
@@ -482,28 +353,6 @@ Resources:
         MaxUnavailable: !Ref EksNodeUpdateMaxUnavailable
       Tags:
         Name: !Sub '${NamePrefix}${EksNodeGroupTagNameSuffix}2'
-    
-  
-  EksAddonVpcCni:
-    Type: AWS::EKS::Addon
-
-    Properties:
-      ClusterName: !Ref EksCluster
-      AddonName: !Ref EksAddonVpcCniName
-      ResolveConflicts: !Ref EksAddonResolveConflicts
-  EksAddonKubeProxy:
-    Type: AWS::EKS::Addon
-    Properties:
-      ClusterName: !Ref EksCluster
-      AddonName: !Ref EksAddonKubeProxyName
-      ResolveConflicts: !Ref EksAddonResolveConflicts
-  EksAddonCoreDns:
-    Type: AWS::EKS::Addon
-    
-    Properties:
-      ClusterName: !Ref EksCluster
-      AddonName: !Ref EksAddonCoreDnsName
-      ResolveConflicts: !Ref EksAddonResolveConflicts
 
   AlbControllerRole:
     Type: AWS::IAM::Role
@@ -580,25 +429,19 @@ Resources:
                   - shield:DeleteProtection
                 Resource: '*'
               - Effect: Allow
-                Action: [ec2:AuthorizeSecurityGroupIngress, ec2:RevokeSecurityGroupIngress]
+                Action:
+                  - ec2:AuthorizeSecurityGroupIngress
+                  - ec2:RevokeSecurityGroupIngress
+                  - ec2:CreateSecurityGroup
+                  - ec2:DeleteSecurityGroup
                 Resource: '*'
-              - Effect: Allow
-                Action: [ec2:CreateSecurityGroup]
-                Resource: '*'
-              - Effect: Allow
-                Action: [ec2:CreateTags]
-                Resource: !Sub 'arn:${AWS::Partition}:ec2:*:*:security-group/*'
               - Effect: Allow
                 Action: [ec2:CreateTags, ec2:DeleteTags]
                 Resource: !Sub 'arn:${AWS::Partition}:ec2:*:*:security-group/*'
               - Effect: Allow
-                Action: [ec2:AuthorizeSecurityGroupIngress, ec2:RevokeSecurityGroupIngress, ec2:DeleteSecurityGroup]
-                Resource: '*'
-              - Effect: Allow
-                Action: [elasticloadbalancing:CreateLoadBalancer, elasticloadbalancing:CreateTargetGroup]
-                Resource: '*'
-              - Effect: Allow
                 Action:
+                  - elasticloadbalancing:CreateLoadBalancer
+                  - elasticloadbalancing:CreateTargetGroup
                   - elasticloadbalancing:CreateListener
                   - elasticloadbalancing:DeleteListener
                   - elasticloadbalancing:CreateRule
@@ -610,9 +453,6 @@ Resources:
                   - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:targetgroup/*/*'
                   - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:loadbalancer/net/*/*'
                   - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:loadbalancer/app/*/*'
-              - Effect: Allow
-                Action: [elasticloadbalancing:AddTags, elasticloadbalancing:RemoveTags]
-                Resource:
                   - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:listener/net/*/*/*'
                   - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:listener/app/*/*/*'
                   - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:listener-rule/net/*/*/*'
@@ -631,14 +471,8 @@ Resources:
                   - elasticloadbalancing:ModifyCapacityReservation
                 Resource: '*'
               - Effect: Allow
-                Action: [elasticloadbalancing:AddTags]
-                Resource:
-                  - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:targetgroup/*/*'
-                  - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:loadbalancer/net/*/*'
-                  - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:loadbalancer/app/*/*'
-              - Effect: Allow
-                Action: 
-                  - elasticloadbalancing:RegisterTargets 
+                Action:
+                  - elasticloadbalancing:RegisterTargets
                   - elasticloadbalancing:DeregisterTargets
                 Resource: !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:targetgroup/*/*'
               - Effect: Allow
@@ -649,6 +483,7 @@ Resources:
                   - elasticloadbalancing:RemoveListenerCertificates
                   - elasticloadbalancing:ModifyRule
                 Resource: '*'
+
   AlbControllerPodIdentityAssociation:
     Type: AWS::EKS::PodIdentityAssociation
     Properties:
@@ -656,18 +491,6 @@ Resources:
       Namespace: !Ref AlbControllerNamespace
       ServiceAccount: !Ref AlbControllerServiceAccountName
       RoleArn: !GetAtt AlbControllerRole.Arn
-
-  EksNodesSshIngress:
-    Type: AWS::EC2::SecurityGroupIngress
-    
-    Condition: CreateBastion
-    Properties:
-      GroupId: !Ref EksNodesSecurityGroup
-      IpProtocol: tcp
-      FromPort: 22
-      ToPort: 22
-      SourceSecurityGroupId: !Ref BastionSecurityGroupId
-      Description: SSH from bastion
 
 Outputs:
   EksClusterName:
@@ -681,7 +504,7 @@ Outputs:
   EksNodesSecurityGroupId:
     Value: !Ref EksNodesSecurityGroup
   EksNodeGroupNames:
-    Description: Terraform output eks_node_group_names; JSON-encoded string array
+    Description: JSON-encoded string array of node group names
     Value: !Sub
       - '["${NodeGroup1}","${NodeGroup2}"]'
       - NodeGroup1: !Ref EksNodeGroupAz1
@@ -697,4 +520,7 @@ Outputs:
     Value: !Ref AlbControllerServiceAccountName
   AlbControllerVersion:
     Value: !Ref AlbControllerVersion
-
+  EksNodeGroup1Name:
+    Value: !Sub '${EksNodeGroupNamePrefix}1'
+  EksNodeGroup2Name:
+    Value: !Sub '${EksNodeGroupNamePrefix}2'
