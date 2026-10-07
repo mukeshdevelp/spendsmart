@@ -203,6 +203,7 @@ Parameters:
   GlueDatabaseName:
     Type: String
     Default: spendsmart_analytics
+    
   AthenaWorkgroupName:
     Type: String
     Default: spendsmart
@@ -337,7 +338,7 @@ Parameters:
   AlbHealthCheckPath:
     Type: String
     Default: /healthz
-    
+
   PublicSubnetTierTag:
     Type: String
     Default: public
